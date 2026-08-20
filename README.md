@@ -1,7 +1,7 @@
 # ZVPN Panel - Next-Gen IKEv2 VPN Management Platform 🛡️
 ### پنل مدیریت حرفه‌ای و مدرن IKEv2 / strongSwan (معماری Multi-Agent v3.0.0)
 
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/zvpn-panel/zvpn-panel)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/Nullfill/ZVPN)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-green.svg)](https://nodejs.org/)
 [![strongSwan](https://img.shields.io/badge/strongSwan-5.9%2B-red.svg)](https://www.strongswan.org/)
 [![Database](https://img.shields.io/badge/PostgreSQL-14%2B-blue.svg)](https://www.postgresql.org/)
@@ -64,7 +64,7 @@
 روی سرور Ubuntu 20.04/22.04/24.04 یا Debian 11/12 با دسترسی root اجرا کنید:
 
 ```bash
-git clone https://github.com/zvpn-panel/zvpn-panel.git /tmp/zvpn-release
+git clone https://github.com/Nullfill/ZVPN.git /tmp/zvpn-release
 cd /tmp/zvpn-release
 sudo bash install.sh
 ```
