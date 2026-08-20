@@ -140,6 +140,11 @@ if grep -q 'conn ikev2-vpn' /etc/ipsec.conf 2>/dev/null; then
   /usr/local/sbin/zvpn-helper normalize-conn || warn "zvpn-helper normalize-conn returned non-zero"
 fi
 
+info "Configuring network performance & TCP MSS clamping (eliminates Windows/WiFi packet fragmentation)..."
+sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
+iptables -t mangle -C FORWARD -p tcp -m tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \
+  iptables -t mangle -A FORWARD -p tcp -m tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
+
 info "Ensuring Node.js 20+ runtime and building assets..."
 if ! command -v node >/dev/null || [[ "$(node -v 2>/dev/null | cut -d. -f1 | tr -d 'v')" -lt 20 ]]; then
   info "Upgrading Node.js to 20+ LTS..."
