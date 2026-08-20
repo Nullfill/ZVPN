@@ -76,7 +76,7 @@ async function recordSession(session) {
       await client.query(`INSERT INTO usage_daily(user_id,usage_date,bytes) VALUES($1,$2,$3) ON CONFLICT(user_id,usage_date) DO UPDATE SET bytes=usage_daily.bytes+EXCLUDED.bytes`, [user.id, today, deltaTotal]);
       await client.query(`INSERT INTO usage_hourly(user_id,hour_ts,bytes) VALUES($1,$2,$3) ON CONFLICT(user_id,hour_ts) DO UPDATE SET bytes=usage_hourly.bytes+EXCLUDED.bytes`, [user.id, hour, deltaTotal]);
     }
-    await client.query(`UPDATE vpn_users SET last_seen_at=now(), last_public_ip=$1::inet, last_virtual_ip=CASE WHEN $2='' THEN last_virtual_ip ELSE $2::inet END WHERE id=$3`, [session.remoteHost || null, session.virtualIp || '', user.id]);
+    await client.query(`UPDATE vpn_users SET last_seen_at=now(), provisioning_status='active', provisioning_error=NULL, last_public_ip=$1::inet, last_virtual_ip=CASE WHEN $2='' THEN last_virtual_ip ELSE $2::inet END WHERE id=$3`, [session.remoteHost || null, session.virtualIp || '', user.id]);
   });
 }
 

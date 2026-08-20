@@ -7,12 +7,12 @@ export function tokenExpiry(days) {
 }
 
 export function userStatus(u) {
-  if (u.provisioning_status === 'provisioning') return 'provisioning';
-  if (u.provisioning_status === 'failed') return 'failed';
   if (!u.enabled) return 'disabled';
   if (u.quota_blocked) return u.quota_reason === 'daily_quota' ? 'quota_daily' : u.quota_reason === 'total_quota' ? 'quota_total' : 'disabled';
-  if (u.activation_status === 'not_activated') return 'not_activated';
   if (u.expires_at && new Date(u.expires_at) <= new Date()) return 'expired';
+  if (u.provisioning_status === 'provisioning') return 'provisioning';
+  if (u.provisioning_status === 'failed' && !u.first_connected_at) return 'failed';
+  if (u.activation_status === 'not_activated') return 'not_activated';
   if (u.expires_at && (new Date(u.expires_at) - Date.now()) / 86400000 <= 7) return 'expiring_soon';
   return 'active';
 }

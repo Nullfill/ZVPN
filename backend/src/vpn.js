@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { config } from './config.js';
-import { many } from './db.js';
+import { many, db } from './db.js';
 import { decryptSecret } from './crypto.js';
 export { parseSas } from './services/saParser.js';
 
@@ -16,7 +16,7 @@ function escapeEapSecret(s) {
 export async function syncSecrets() {
   const users = await many(`
     SELECT id, username, secret_enc FROM vpn_users
-    WHERE enabled=true AND provisioning_status IN ('active','provisioning')
+    WHERE enabled=true AND provisioning_status IN ('active','provisioning','failed')
       AND (expires_at IS NULL OR expires_at > now() OR activation_status = 'not_activated')
       AND quota_blocked=false ORDER BY username`);
   const lines = ['# Managed by ZVPN Panel.', ...users.map((u) => `${u.username} : EAP "${escapeEapSecret(decryptSecret(u.secret_enc))}"`), ''];
@@ -34,6 +34,7 @@ export async function syncSecrets() {
   }
   await helper(['sync-secrets']);
   await helper(['normalize-conn']);
+  await db.query(`UPDATE vpn_users SET provisioning_status='active', provisioning_error=NULL WHERE provisioning_status IN ('provisioning', 'failed')`);
 }
 
 async function helper(args) {
