@@ -1,6 +1,6 @@
 """
 ZVPN Windows Client - Official Native IKEv2 Desktop Application
-Pure Win32 Zero-Prompt In-App Engine for Windows 10 & 11
+Modern Ultra-Sleek Glassmorphic RTL Interface for Windows 10 & 11
 Author: ZVPN Panel Team (v3.0.0)
 """
 
@@ -18,7 +18,7 @@ import re
 import ctypes
 from ctypes import wintypes
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox
 
 # --- Win32 Native RAS Definitions ---
 class RASDIALPARAMS(ctypes.Structure):
@@ -64,16 +64,34 @@ CONFIG_FILE = os.path.join(APP_DATA_DIR, "config.json")
 USER_PBK = os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Network\Connections\Pbk\rasphone.pbk")
 os.makedirs(APP_DATA_DIR, exist_ok=True)
 
+# --- Modern Theme Color Palette ---
+BG_DARK = "#070b14"
+BG_CARD = "#0f172a"
+BG_CARD_INNER = "#1e293b"
+BG_INPUT = "#0b1324"
+BORDER_COLOR = "#1e293b"
+BORDER_ACTIVE = "#38bdf8"
+TEXT_PRIMARY = "#f8fafc"
+TEXT_SECONDARY = "#94a3b8"
+TEXT_MUTED = "#64748b"
+ACCENT_BLUE = "#38bdf8"
+ACCENT_GREEN = "#10b981"
+ACCENT_GREEN_HOVER = "#059669"
+ACCENT_RED = "#f43f5e"
+ACCENT_RED_HOVER = "#e11d48"
+ACCENT_AMBER = "#f59e0b"
+
 class ZvpnClientApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("ZVPN - Windows IKEv2 Client")
-        self.root.geometry("560x690")
-        self.root.minsize(520, 660)
-        self.root.configure(bg="#0b1320")
+        self.root.title("ZVPN Client — کلاینت ویندوز")
+        self.root.geometry("580x720")
+        self.root.minsize(540, 680)
+        self.root.configure(bg=BG_DARK)
 
         self.sub_url = tk.StringVar()
-        self.status_text = tk.StringVar(value="آماده برای اتصال")
+        self.status_title_text = tk.StringVar(value="آماده برای اتصال")
+        self.status_sub_text = tk.StringVar(value="روی دکمه اتصال کلیک کنید تا ارتباط امن برقرار شود")
         self.ping_text = tk.StringVar(value="—")
         self.connection_state = "disconnected" # "connected", "connecting", "disconnected"
         self.user_data = None
@@ -84,7 +102,7 @@ class ZvpnClientApp:
         self.load_local_config()
         self.setup_ui()
 
-        # Handle window close cleanly
+        # Handle window close
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         # Background monitors
@@ -113,89 +131,148 @@ class ZvpnClientApp:
             pass
 
     def setup_ui(self):
-        # Header Frame
-        header = tk.Frame(self.root, bg="#0f1d33", pady=15, padx=20)
+        # Header Container
+        header = tk.Frame(self.root, bg="#0d1527", pady=16, padx=22, highlightthickness=1, highlightbackground=BORDER_COLOR)
         header.pack(fill="x")
 
-        title_lbl = tk.Label(header, text="ZVPN Desktop Client", font=("Segoe UI", 16, "bold"), fg="#38bdf8", bg="#0f1d33")
-        title_lbl.pack(anchor="w")
+        # Header Title and Logo
+        head_row = tk.Frame(header, bg="#0d1527")
+        head_row.pack(fill="x")
 
-        sub_lbl = tk.Label(header, text="اتصال پرسرعت، هوشمند و امن IKEv2 برای ویندوز ۱۰ و ۱۱", font=("Segoe UI", 9), fg="#94a3b8", bg="#0f1d33")
-        sub_lbl.pack(anchor="w", pady=(2, 0))
+        title_lbl = tk.Label(head_row, text="⚡ ZVPN Desktop Client", font=("Segoe UI", 15, "bold"), fg=ACCENT_BLUE, bg="#0d1527")
+        title_lbl.pack(side="right")
 
-        # Main Container
-        main = tk.Frame(self.root, bg="#0b1320", padx=20, pady=15)
+        self.proto_badge = tk.Label(head_row, text="IKEv2 Native", font=("Consolas", 8, "bold"), fg="#38bdf8", bg="#0c2340", padx=8, pady=3, relief="flat")
+        self.proto_badge.pack(side="left")
+
+        sub_lbl = tk.Label(header, text="اتصال پرسرعت، هوشمند و بدون قطعی به شبکه اختصاصی ZVPN", font=("Segoe UI", 8), fg=TEXT_MUTED, bg="#0d1527")
+        sub_lbl.pack(anchor="e", pady=(4, 0))
+
+        # Main Scrollable Body
+        main = tk.Frame(self.root, bg=BG_DARK, padx=20, pady=16)
         main.pack(fill="both", expand=True)
 
-        # 1. Subscription Input Section
-        sub_box = tk.LabelFrame(main, text=" لینک اشتراک (Subscription URL) ", font=("Segoe UI", 10, "bold"), fg="#38bdf8", bg="#112240", padx=12, pady=10)
-        sub_box.pack(fill="x", pady=(0, 12))
+        # 1. Subscription Input Section (RTL)
+        sub_card = tk.Frame(main, bg=BG_CARD, padx=16, pady=14, highlightthickness=1, highlightbackground=BORDER_COLOR)
+        sub_card.pack(fill="x", pady=(0, 14))
 
-        entry_frame = tk.Frame(sub_box, bg="#112240")
+        sub_head = tk.Frame(sub_card, bg=BG_CARD)
+        sub_head.pack(fill="x", pady=(0, 8))
+
+        tk.Label(sub_head, text="🔗 لینک اشتراک کاربر", font=("Segoe UI", 10, "bold"), fg=TEXT_PRIMARY, bg=BG_CARD).pack(side="right")
+        tk.Label(sub_head, text="Subscription URL", font=("Consolas", 8), fg=TEXT_MUTED, bg=BG_CARD).pack(side="left")
+
+        entry_frame = tk.Frame(sub_card, bg=BG_CARD)
         entry_frame.pack(fill="x")
 
-        self.url_entry = tk.Entry(entry_frame, textvariable=self.sub_url, font=("Consolas", 10), bg="#071224", fg="#f1f5f9", insertbackground="#38bdf8", relief="flat", highlightthickness=1, highlightbackground="#1e3a8a", highlightcolor="#38bdf8")
-        self.url_entry.pack(side="left", fill="x", expand=True, ipady=6, padx=(0, 6))
+        # Sync Button (Left)
+        self.sync_btn = tk.Button(entry_frame, text="🔄 بروزرسانی", font=("Segoe UI", 9, "bold"), bg="#0284c7", fg="#ffffff", activebackground="#0369a1", activeforeground="#ffffff", relief="flat", padx=12, pady=6, cursor="hand2", command=self.on_sync_clicked)
+        self.sync_btn.pack(side="left", padx=(0, 6))
 
+        # Paste Button (Left-middle)
+        self.paste_btn = tk.Button(entry_frame, text="📋 جایگذاری", font=("Segoe UI", 9), bg=BG_CARD_INNER, fg="#93c5fd", activebackground="#334155", activeforeground="#ffffff", relief="flat", padx=10, pady=6, cursor="hand2", command=self.paste_clipboard_to_entry)
+        self.paste_btn.pack(side="left", padx=(0, 8))
+
+        # URL Entry (Right side)
+        self.url_entry = tk.Entry(entry_frame, textvariable=self.sub_url, font=("Consolas", 9), bg=BG_INPUT, fg="#f1f5f9", insertbackground=ACCENT_BLUE, relief="flat", highlightthickness=1, highlightbackground=BORDER_COLOR, highlightcolor=ACCENT_BLUE)
+        self.url_entry.pack(side="right", fill="x", expand=True, ipady=6)
         self.bind_entry_shortcuts(self.url_entry)
 
-        # Quick Paste Button
-        self.paste_btn = tk.Button(entry_frame, text="جایگذاری (Paste)", font=("Segoe UI", 9), bg="#1e293b", fg="#93c5fd", activebackground="#334155", activeforeground="#ffffff", relief="flat", padx=8, pady=4, cursor="hand2", command=self.paste_clipboard_to_entry)
-        self.paste_btn.pack(side="left", padx=(0, 6))
-
-        # Sync Button
-        self.sync_btn = tk.Button(entry_frame, text="بروزرسانی", font=("Segoe UI", 9, "bold"), bg="#0284c7", fg="#ffffff", activebackground="#0369a1", activeforeground="#ffffff", relief="flat", padx=12, pady=4, cursor="hand2", command=self.on_sync_clicked)
-        self.sync_btn.pack(side="right")
-
-        # 2. Account Details Card
-        self.info_card = tk.LabelFrame(main, text=" اطلاعات حساب کاربری ", font=("Segoe UI", 10, "bold"), fg="#94a3b8", bg="#112240", padx=15, pady=12)
+        # 2. Account Details Grid (2x2 Clean RTL Tiles)
+        self.info_card = tk.Frame(main, bg=BG_CARD, padx=16, pady=14, highlightthickness=1, highlightbackground=BORDER_COLOR)
         self.info_card.pack(fill="x", pady=(0, 14))
 
-        self.lbl_username = self.create_info_row(self.info_card, "نام کاربر:", "—")
-        self.lbl_traffic = self.create_info_row(self.info_card, "مصرف ترافیک:", "—")
-        self.lbl_remain = self.create_info_row(self.info_card, "حجم باقیمانده:", "—")
-        self.lbl_expire = self.create_info_row(self.info_card, "اعتبار حساب:", "—")
-        self.lbl_server = self.create_info_row(self.info_card, "سرور VPN:", "—")
+        info_head = tk.Frame(self.info_card, bg=BG_CARD)
+        info_head.pack(fill="x", pady=(0, 10))
+        tk.Label(info_head, text="📊 مشخصات حساب و ترافیک", font=("Segoe UI", 10, "bold"), fg=TEXT_PRIMARY, bg=BG_CARD).pack(side="right")
+        self.status_badge_lbl = tk.Label(info_head, text="حساب فعال", font=("Segoe UI", 8, "bold"), fg="#6ee7b7", bg="#064e3b", padx=8, pady=2)
+        self.status_badge_lbl.pack(side="left")
 
-        # 3. Connection Status Card
-        status_card = tk.Frame(main, bg="#112240", padx=15, pady=14, relief="flat", highlightthickness=1, highlightbackground="#1e3a8a")
-        status_card.pack(fill="x", pady=(0, 14))
+        # Stats Grid (RTL layout)
+        grid_frame = tk.Frame(self.info_card, bg=BG_CARD)
+        grid_frame.pack(fill="x")
+        grid_frame.columnconfigure(0, weight=1)
+        grid_frame.columnconfigure(1, weight=1)
 
-        self.status_icon = tk.Label(status_card, text="●", font=("Segoe UI", 24), fg="#ef4444", bg="#112240")
-        self.status_icon.pack(side="left", padx=(5, 12))
+        # Tile 1: User & Server
+        self.lbl_username = self.create_grid_tile(grid_frame, "👤 نام کاربری", "—", row=0, col=1)
+        self.lbl_server = self.create_grid_tile(grid_frame, "🌐 آدرس سرور", "—", row=0, col=0)
 
-        status_text_frame = tk.Frame(status_card, bg="#112240")
-        status_text_frame.pack(side="left", fill="x", expand=True)
+        # Tile 2: Usage & Remaining
+        self.lbl_traffic = self.create_grid_tile(grid_frame, "📈 مصرف کل", "—", row=1, col=1)
+        self.lbl_remain = self.create_grid_tile(grid_frame, "⏳ باقیمانده", "—", row=1, col=0)
 
-        self.status_title = tk.Label(status_text_frame, text="وضعیت: قطع اتصال", font=("Segoe UI", 11, "bold"), fg="#f1f5f9", bg="#112240")
-        self.status_title.pack(anchor="w")
+        # Tile 3: Expiry
+        self.lbl_expire = self.create_grid_tile(grid_frame, "📅 تاریخ انقضا", "—", row=2, col=1)
+        self.lbl_today = self.create_grid_tile(grid_frame, "📆 مصرف امروز", "—", row=2, col=0)
 
-        self.status_detail = tk.Label(status_text_frame, textvariable=self.status_text, font=("Segoe UI", 9), fg="#94a3b8", bg="#112240")
-        self.status_detail.pack(anchor="w")
+        # Visual Traffic Progress Bar
+        bar_frame = tk.Frame(self.info_card, bg=BG_CARD, pady=8)
+        bar_frame.pack(fill="x")
 
-        # Ping Tag
-        ping_frame = tk.Frame(status_card, bg="#112240")
-        ping_frame.pack(side="right", padx=5)
-        tk.Label(ping_frame, text="پینگ", font=("Segoe UI", 8), fg="#64748b", bg="#112240").pack()
-        self.ping_lbl = tk.Label(ping_frame, textvariable=self.ping_text, font=("Consolas", 10, "bold"), fg="#38bdf8", bg="#112240")
+        bar_txt_row = tk.Frame(bar_frame, bg=BG_CARD)
+        bar_txt_row.pack(fill="x", pady=(0, 4))
+        tk.Label(bar_txt_row, text="میزان حجم مصرف‌شده", font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_CARD).pack(side="right")
+        self.pct_lbl = tk.Label(bar_txt_row, text="0%", font=("Consolas", 8, "bold"), fg=ACCENT_BLUE, bg=BG_CARD)
+        self.pct_lbl.pack(side="left")
+
+        self.progress_canvas = tk.Canvas(bar_frame, height=8, bg=BG_CARD_INNER, highlightthickness=0)
+        self.progress_canvas.pack(fill="x")
+        self.progress_fill = self.progress_canvas.create_rectangle(0, 0, 0, 8, fill=ACCENT_BLUE, width=0)
+
+        # 3. Connection Status Card (Glassmorphic Hero Card)
+        self.status_card = tk.Frame(main, bg="#0d1829", padx=18, pady=16, highlightthickness=1, highlightbackground=BORDER_COLOR)
+        self.status_card.pack(fill="x", pady=(0, 14))
+
+        status_row = tk.Frame(self.status_card, bg="#0d1829")
+        status_row.pack(fill="x")
+
+        # Ping info (Left)
+        ping_box = tk.Frame(status_row, bg="#112240", padx=10, pady=6, highlightthickness=1, highlightbackground="#1e3a8a")
+        ping_box.pack(side="left")
+        tk.Label(ping_box, text="PING", font=("Consolas", 7, "bold"), fg=TEXT_MUTED, bg="#112240").pack()
+        self.ping_lbl = tk.Label(ping_box, textvariable=self.ping_text, font=("Consolas", 10, "bold"), fg=ACCENT_BLUE, bg="#112240")
         self.ping_lbl.pack()
 
-        # 4. Action Buttons
-        self.connect_btn = tk.Button(main, text="اتصال به ZVPN (Connect)", font=("Segoe UI", 12, "bold"), bg="#10b981", fg="#ffffff", activebackground="#059669", activeforeground="#ffffff", relief="flat", pady=11, cursor="hand2", command=self.on_toggle_connect)
+        # Status text & Icon (Right side RTL)
+        status_info = tk.Frame(status_row, bg="#0d1829")
+        status_info.pack(side="right", fill="x", expand=True, padx=(10, 0))
+
+        self.status_title = tk.Label(status_info, textvariable=self.status_title_text, font=("Segoe UI", 12, "bold"), fg=TEXT_PRIMARY, bg="#0d1829", anchor="e")
+        self.status_title.pack(anchor="e")
+
+        self.status_detail = tk.Label(status_info, textvariable=self.status_sub_text, font=("Segoe UI", 8), fg=TEXT_MUTED, bg="#0d1829", anchor="e")
+        self.status_detail.pack(anchor="e", pady=(2, 0))
+
+        self.status_icon = tk.Label(status_row, text="●", font=("Segoe UI", 26), fg=ACCENT_RED, bg="#0d1829")
+        self.status_icon.pack(side="right", padx=(8, 0))
+
+        # 4. Hero Connect / Disconnect Action Button
+        self.connect_btn = tk.Button(main, text="🚀 اتصال به ZVPN (Connect)", font=("Segoe UI", 13, "bold"), bg=ACCENT_GREEN, fg="#ffffff", activebackground=ACCENT_GREEN_HOVER, activeforeground="#ffffff", relief="flat", pady=12, cursor="hand2", command=self.on_toggle_connect)
         self.connect_btn.pack(fill="x", pady=(0, 10))
 
-        btn_row = tk.Frame(main, bg="#0b1320")
-        btn_row.pack(fill="x")
+        # 5. Quick Utilities Row
+        util_row = tk.Frame(main, bg=BG_DARK)
+        util_row.pack(fill="x")
 
-        self.setup_btn = tk.Button(btn_row, text="تنظیم مجدد کانکشن", font=("Segoe UI", 9), bg="#1e293b", fg="#cbd5e1", activebackground="#334155", activeforeground="#ffffff", relief="flat", pady=6, cursor="hand2", command=self.on_reinstall_connection)
-        self.setup_btn.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self.setup_btn = tk.Button(util_row, text="⚙️ تنظیم مجدد کانکشن", font=("Segoe UI", 8), bg=BG_CARD_INNER, fg=TEXT_SECONDARY, activebackground="#334155", activeforeground="#ffffff", relief="flat", pady=6, cursor="hand2", command=self.on_reinstall_connection)
+        self.setup_btn.pack(side="right", fill="x", expand=True, padx=(4, 0))
 
-        self.win_settings_btn = tk.Button(btn_row, text="تنظیمات ویندوز", font=("Segoe UI", 9), bg="#1e293b", fg="#cbd5e1", activebackground="#334155", activeforeground="#ffffff", relief="flat", pady=6, cursor="hand2", command=self.open_windows_vpn_settings)
-        self.win_settings_btn.pack(side="right", fill="x", expand=True, padx=(5, 0))
+        self.win_settings_btn = tk.Button(util_row, text="🌐 تنظیمات VPN ویندوز", font=("Segoe UI", 8), bg=BG_CARD_INNER, fg=TEXT_SECONDARY, activebackground="#334155", activeforeground="#ffffff", relief="flat", pady=6, cursor="hand2", command=self.open_windows_vpn_settings)
+        self.win_settings_btn.pack(side="left", fill="x", expand=True, padx=(0, 4))
 
         # Footer
-        footer = tk.Label(self.root, text="ZVPN Platform v3.0.0 · موتور اتصال مستقیم Win32", font=("Segoe UI", 8), fg="#64748b", bg="#0b1320", pady=8)
+        footer = tk.Label(self.root, text="ZVPN Platform v3.0.0 · محافظت امنیتی IKEv2 با رمزنگاری سخت‌افزاری AES-256", font=("Segoe UI", 8), fg="#475569", bg=BG_DARK, pady=10)
         footer.pack(side="bottom")
+
+    def create_grid_tile(self, parent, title, val, row, col):
+        tile = tk.Frame(parent, bg=BG_CARD_INNER, padx=12, pady=8, highlightthickness=1, highlightbackground=BORDER_COLOR)
+        tile.grid(row=row, column=col, sticky="nsew", padx=3, pady=3)
+        t = tk.Label(tile, text=title, font=("Segoe UI", 8), fg=TEXT_MUTED, bg=BG_CARD_INNER, anchor="e")
+        t.pack(anchor="e")
+        v = tk.Label(tile, text=val, font=("Consolas", 9, "bold"), fg=TEXT_PRIMARY, bg=BG_CARD_INNER, anchor="e")
+        v.pack(anchor="e", pady=(2, 0))
+        return v
 
     def bind_entry_shortcuts(self, entry):
         def _paste(event=None):
@@ -244,7 +321,7 @@ class ZvpnClientApp:
         entry.bind("<Control-A>", _select_all)
         entry.bind("<Shift-Insert>", _paste)
 
-        menu = tk.Menu(entry, tearoff=0, bg="#1e293b", fg="#f1f5f9", activebackground="#0284c7", activeforeground="#ffffff")
+        menu = tk.Menu(entry, tearoff=0, bg=BG_CARD_INNER, fg="#f1f5f9", activebackground="#0284c7", activeforeground="#ffffff")
         menu.add_command(label="جایگذاری (Paste)", command=_paste)
         menu.add_command(label="کپی (Copy)", command=_copy)
         menu.add_command(label="برش (Cut)", command=_cut)
@@ -264,15 +341,6 @@ class ZvpnClientApp:
                 self.on_sync_clicked()
         except Exception:
             messagebox.showinfo("کلیپ‌بورد", "متنی در کلیپ‌بورد یافت نشد.")
-
-    def create_info_row(self, parent, title, val):
-        row = tk.Frame(parent, bg="#112240", pady=3)
-        row.pack(fill="x")
-        t = tk.Label(row, text=title, font=("Segoe UI", 9), fg="#94a3b8", bg="#112240", width=14, anchor="w")
-        t.pack(side="right")
-        v = tk.Label(row, text=val, font=("Consolas", 9, "bold"), fg="#f8fafc", bg="#112240", anchor="w")
-        v.pack(side="left", fill="x", expand=True)
-        return v
 
     def format_bytes(self, n):
         if n is None:
@@ -294,8 +362,8 @@ class ZvpnClientApp:
             messagebox.showwarning("خطا", "لطفاً ابتدا لینک اشتراک خود را وارد کنید.")
             return
         self.save_local_config()
-        self.status_text.set("در حال دریافت اطلاعات از سرور...")
-        self.sync_btn.config(state="disabled", text="...")
+        self.status_sub_text.set("در حال دریافت اطلاعات از سرور...")
+        self.sync_btn.config(state="disabled", text="⏳ ...")
         threading.Thread(target=self.fetch_subscription, args=(True,), daemon=True).start()
 
     def fetch_subscription(self, auto_install=True):
@@ -320,27 +388,39 @@ class ZvpnClientApp:
                 if auto_install:
                     self.install_windows_profile(data)
         except Exception as e:
-            self.root.after(0, lambda: self.status_text.set(f"خطا در دریافت اشتراک: {str(e)[:40]}"))
+            self.root.after(0, lambda: self.status_sub_text.set(f"خطا در دریافت اشتراک: {str(e)[:40]}"))
             self.root.after(0, lambda: messagebox.showerror("خطا در اتصال به سرور", f"امکان دریافت اطلاعات اشتراک وجود ندارد:\n{e}"))
         finally:
-            self.root.after(0, lambda: self.sync_btn.config(state="normal", text="بروزرسانی"))
+            self.root.after(0, lambda: self.sync_btn.config(state="normal", text="🔄 بروزرسانی"))
 
     def update_user_ui(self, d):
         self.lbl_username.config(text=d.get("username", "—"))
         self.lbl_server.config(text=d.get("serverAddress", "—"))
 
-        used = self.format_bytes(d.get("usageTotal", 0))
-        total = self.format_bytes(d.get("totalLimitBytes")) if not d.get("unlimitedTraffic") else "نامحدود (∞)"
+        # Traffic
+        used_num = d.get("usageTotal", 0)
+        used = self.format_bytes(used_num)
+        total_limit = d.get("totalLimitBytes")
+        total = self.format_bytes(total_limit) if not d.get("unlimitedTraffic") else "نامحدود (∞)"
         self.lbl_traffic.config(text=f"{used} / {total}")
 
+        # Remaining
         if d.get("unlimitedTraffic"):
-            self.lbl_remain.config(text="نامحدود")
-        elif d.get("totalLimitBytes"):
-            rem = max(0, d.get("totalLimitBytes", 0) - d.get("usageTotal", 0))
+            self.lbl_remain.config(text="نامحدود (∞)")
+            self.pct_lbl.config(text="0%")
+            self.update_progress_bar(0)
+        elif total_limit:
+            rem = max(0, total_limit - used_num)
             self.lbl_remain.config(text=self.format_bytes(rem))
+            pct = min(100, int((used_num / total_limit) * 100))
+            self.pct_lbl.config(text=f"{pct}%")
+            self.update_progress_bar(pct)
         else:
             self.lbl_remain.config(text="نامحدود")
+            self.pct_lbl.config(text="0%")
+            self.update_progress_bar(0)
 
+        # Expiry
         if d.get("expiresAt"):
             self.lbl_expire.config(text=d.get("expiresAt")[:10])
         elif d.get("durationDays") and d.get("activationStatus") == "not_activated":
@@ -348,8 +428,26 @@ class ZvpnClientApp:
         else:
             self.lbl_expire.config(text="نامحدود")
 
+        # Today
+        self.lbl_today.config(text=self.format_bytes(d.get("todayBytes", 0)))
+
+        # Status badge
+        if not d.get("enabled") or d.get("quotaBlocked"):
+            self.status_badge_lbl.config(text="غیرفعال / اتمام حجم", fg="#fda4af", bg="#881337")
+        else:
+            self.status_badge_lbl.config(text="حساب فعال", fg="#6ee7b7", bg="#064e3b")
+
+    def update_progress_bar(self, pct):
+        try:
+            width = self.progress_canvas.winfo_width() or 480
+            fill_w = int((pct / 100.0) * width)
+            color = ACCENT_RED if pct >= 100 else (ACCENT_AMBER if pct >= 80 else ACCENT_BLUE)
+            self.progress_canvas.coords(self.progress_fill, 0, 0, fill_w, 8)
+            self.progress_canvas.itemconfig(self.progress_fill, fill=color)
+        except Exception:
+            pass
+
     def configure_silent_pbk(self, vpn_name):
-        """Configure rasphone.pbk so Windows NEVER prompts for username/password dialogs."""
         paths = [
             USER_PBK,
             os.path.expandvars(r"%ProgramData%\Microsoft\Network\Connections\Pbk\rasphone.pbk"),
@@ -382,7 +480,7 @@ class ZvpnClientApp:
                 pass
 
     def install_windows_profile(self, data):
-        self.status_text.set("در حال پیکربندی خودکار کانکشن در ویندوز...")
+        self.status_sub_text.set("در حال پیکربندی خودکار کانکشن در ویندوز...")
         vpn_name = self.vpn_name
         server = data.get("serverAddress")
         username = data.get("username")
@@ -413,9 +511,9 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
             cmd = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script]
             run_hidden(cmd, capture_output=True, timeout=15)
             self.configure_silent_pbk(vpn_name)
-            self.root.after(0, lambda: self.status_text.set("کانکشن با موفقیت و بدون نیاز به ورود رمز پیکربندی شد."))
+            self.root.after(0, lambda: self.status_sub_text.set("کانکشن با موفقیت و بدون نیاز به ورود رمز پیکربندی شد."))
         except Exception as e:
-            self.root.after(0, lambda: self.status_text.set(f"خطا در ایجاد کانکشن: {e}"))
+            self.root.after(0, lambda: self.status_sub_text.set(f"خطا در ایجاد کانکشن: {e}"))
 
     def on_reinstall_connection(self):
         if not self.user_data:
@@ -435,8 +533,8 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
 
     def connect_vpn(self):
         self.connection_state = "connecting"
-        self.update_connection_ui("connecting", "در حال برقراری اتصال مستقیم با سرور...")
-        self.connect_btn.config(state="disabled", text="در حال برقراری اتصال...")
+        self.update_connection_ui("connecting", "در حال اتصال...", "در حال برقراری ارتباط با سرور...")
+        self.connect_btn.config(state="disabled", text="⏳ در حال برقراری اتصال...")
 
         def _do_connect():
             vpn_name = self.vpn_name
@@ -465,24 +563,24 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
 
                 if res == 0:
                     self.active_hrasconn = hRasConn
-                    self.root.after(0, lambda: self.update_connection_ui("connected", "متصل شد (IKEv2 Secured)"))
+                    self.root.after(0, lambda: self.update_connection_ui("connected", "وضعیت: متصل به ZVPN", "اتصال ایمن و پرسرعت IKEv2 فعال است"))
                 else:
                     err_buf = ctypes.create_unicode_buffer(512)
                     rasapi32.RasGetErrorStringW(res, err_buf, 512)
                     err_text = err_buf.value or f"کد خطا {res}"
-                    self.root.after(0, lambda: self.update_connection_ui("disconnected", f"خطا در اتصال: {err_text}"))
+                    self.root.after(0, lambda: self.update_connection_ui("disconnected", "وضعیت: قطع اتصال", f"خطا در برقراری اتصال: {err_text}"))
             else:
                 res = run_hidden(["rasdial.exe", vpn_name, username, password], capture_output=True, text=True)
                 if res.returncode == 0:
-                    self.root.after(0, lambda: self.update_connection_ui("connected", "متصل شد (IKEv2 Secured)"))
+                    self.root.after(0, lambda: self.update_connection_ui("connected", "وضعیت: متصل به ZVPN", "اتصال ایمن و پرسرعت IKEv2 فعال است"))
                 else:
                     err_msg = (res.stdout or res.stderr or "").strip()
-                    self.root.after(0, lambda: self.update_connection_ui("disconnected", f"خطا در اتصال: {err_msg[:45]}"))
+                    self.root.after(0, lambda: self.update_connection_ui("disconnected", "وضعیت: قطع اتصال", f"خطا: {err_msg[:45]}"))
 
         threading.Thread(target=_do_connect, daemon=True).start()
 
     def disconnect_vpn(self):
-        self.connect_btn.config(state="disabled", text="در حال قطع...")
+        self.connect_btn.config(state="disabled", text="⏳ در حال قطع...")
         def _do_disconnect():
             if rasapi32 and self.active_hrasconn:
                 try:
@@ -491,15 +589,13 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
                 except Exception:
                     pass
 
-            # Also hangup any active connections with our name via rasdial
             run_hidden(["rasdial.exe", self.vpn_name, "/disconnect"], capture_output=True)
             run_hidden(["rasdial.exe", f"ZVPN Panel - {self.user_data.get('username') if self.user_data else ''}", "/disconnect"], capture_output=True)
-            self.root.after(0, lambda: self.update_connection_ui("disconnected", "اتصال قطع شد."))
+            self.root.after(0, lambda: self.update_connection_ui("disconnected", "وضعیت: قطع اتصال", "ارتباط با سرور قطع شد"))
 
         threading.Thread(target=_do_disconnect, daemon=True).start()
 
     def is_vpn_active_in_windows(self):
-        """Reliably check if our VPN is connected in Windows."""
         try:
             r = run_hidden(["rasdial.exe"], capture_output=True, text=True)
             out = r.stdout or ""
@@ -517,20 +613,18 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
         return False
 
     def active_connection_monitor(self):
-        """Continuously check VPN connection status."""
         while self._polling:
             try:
                 is_active = self.is_vpn_active_in_windows()
                 if is_active and self.connection_state != "connected":
-                    self.root.after(0, lambda: self.update_connection_ui("connected", "متصل شد (IKEv2 Secured)"))
+                    self.root.after(0, lambda: self.update_connection_ui("connected", "وضعیت: متصل به ZVPN", "اتصال ایمن و پرسرعت IKEv2 فعال است"))
                 elif not is_active and self.connection_state == "connected":
-                    self.root.after(0, lambda: self.update_connection_ui("disconnected", "قطع اتصال"))
+                    self.root.after(0, lambda: self.update_connection_ui("disconnected", "وضعیت: قطع اتصال", "ارتباط با سرور قطع شد"))
             except Exception:
                 pass
             time.sleep(3)
 
     def ping_monitor_loop(self):
-        """Continuously check latency when connected."""
         while self._polling:
             if self.connection_state == "connected":
                 try:
@@ -547,22 +641,23 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
                 self.root.after(0, lambda: self.ping_text.set("—"))
             time.sleep(4)
 
-    def update_connection_ui(self, state, msg):
+    def update_connection_ui(self, state, title_msg, sub_msg):
         self.connection_state = state
-        self.status_text.set(msg)
+        self.status_title_text.set(title_msg)
+        self.status_sub_text.set(sub_msg)
         self.connect_btn.config(state="normal")
 
         if state == "connected":
-            self.status_icon.config(text="●", fg="#10b981")
-            self.status_title.config(text="وضعیت: متصل به ZVPN", fg="#10b981")
-            self.connect_btn.config(text="قطع اتصال (Disconnect)", bg="#ef4444", activebackground="#dc2626")
+            self.status_icon.config(text="●", fg=ACCENT_GREEN)
+            self.status_title.config(fg=ACCENT_GREEN)
+            self.connect_btn.config(text="⏹ قطع اتصال (Disconnect)", bg=ACCENT_RED, activebackground=ACCENT_RED_HOVER)
         elif state == "connecting":
-            self.status_icon.config(text="●", fg="#f59e0b")
-            self.status_title.config(text="وضعیت: در حال اتصال...", fg="#f59e0b")
+            self.status_icon.config(text="●", fg=ACCENT_AMBER)
+            self.status_title.config(fg=ACCENT_AMBER)
         else:
-            self.status_icon.config(text="●", fg="#ef4444")
-            self.status_title.config(text="وضعیت: قطع اتصال", fg="#f1f5f9")
-            self.connect_btn.config(text="اتصال به ZVPN (Connect)", bg="#10b981", activebackground="#059669")
+            self.status_icon.config(text="●", fg=ACCENT_RED)
+            self.status_title.config(fg=TEXT_PRIMARY)
+            self.connect_btn.config(text="🚀 اتصال به ZVPN (Connect)", bg=ACCENT_GREEN, activebackground=ACCENT_GREEN_HOVER)
 
     def open_windows_vpn_settings(self):
         popen_hidden(["cmd.exe", "/c", "start ms-settings:network-vpn"])
