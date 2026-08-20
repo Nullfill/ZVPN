@@ -16,6 +16,27 @@ import ssl
 import tkinter as tk
 from tkinter import ttk, messagebox
 
+# Windows-specific constants for hidden process execution
+CREATE_NO_WINDOW = 0x08000000
+
+def run_hidden(cmd, **kwargs):
+    """Run a subprocess completely hidden without flashing any CMD windows."""
+    kwargs["creationflags"] = CREATE_NO_WINDOW
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = 0 # SW_HIDE
+    kwargs["startupinfo"] = si
+    return subprocess.run(cmd, **kwargs)
+
+def popen_hidden(cmd, **kwargs):
+    """Spawn a background process completely hidden."""
+    kwargs["creationflags"] = CREATE_NO_WINDOW
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = 0
+    kwargs["startupinfo"] = si
+    return subprocess.Popen(cmd, **kwargs)
+
 # Windows-specific app data folder
 APP_DATA_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "ZVPN")
 CONFIG_FILE = os.path.join(APP_DATA_DIR, "config.json")
@@ -25,27 +46,29 @@ class ZvpnClientApp:
     def __init__(self, root):
         self.root = root
         self.root.title("ZVPN - Windows IKEv2 Client")
-        self.root.geometry("540x660")
-        self.root.minsize(500, 620)
+        self.root.geometry("560x670")
+        self.root.minsize(520, 640)
         self.root.configure(bg="#0b1320")
-
-        # Set application icon / title bar styling
-        try:
-            self.root.iconbitmap(default="")
-        except Exception:
-            pass
 
         self.sub_url = tk.StringVar()
         self.status_text = tk.StringVar(value="آماده برای اتصال")
         self.connection_state = "disconnected" # "connected", "connecting", "disconnected"
         self.user_data = None
         self.vpn_name = "ZVPN"
+        self._polling = True
 
         self.load_local_config()
         self.setup_ui()
 
+        # Handle window close cleanly
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
         # Check existing connection status on startup
         threading.Thread(target=self.initial_status_check, daemon=True).start()
+
+    def on_close(self):
+        self._polling = False
+        self.root.destroy()
 
     def load_local_config(self):
         if os.path.exists(CONFIG_FILE):
@@ -86,8 +109,16 @@ class ZvpnClientApp:
         entry_frame.pack(fill="x")
 
         self.url_entry = tk.Entry(entry_frame, textvariable=self.sub_url, font=("Consolas", 10), bg="#071224", fg="#f1f5f9", insertbackground="#38bdf8", relief="flat", highlightthickness=1, highlightbackground="#1e3a8a", highlightcolor="#38bdf8")
-        self.url_entry.pack(side="left", fill="x", expand=True, ipady=6, padx=(0, 8))
+        self.url_entry.pack(side="left", fill="x", expand=True, ipady=6, padx=(0, 6))
 
+        # Bind all copy/paste/select-all keys for English & Persian keyboard layouts
+        self.bind_entry_shortcuts(self.url_entry)
+
+        # Quick Paste Button
+        self.paste_btn = tk.Button(entry_frame, text="جایگذاری (Paste)", font=("Segoe UI", 9), bg="#1e293b", fg="#93c5fd", activebackground="#334155", activeforeground="#ffffff", relief="flat", padx=8, pady=4, cursor="hand2", command=self.paste_clipboard_to_entry)
+        self.paste_btn.pack(side="left", padx=(0, 6))
+
+        # Sync Button
         self.sync_btn = tk.Button(entry_frame, text="بروزرسانی", font=("Segoe UI", 9, "bold"), bg="#0284c7", fg="#ffffff", activebackground="#0369a1", activeforeground="#ffffff", relief="flat", padx=12, pady=4, cursor="hand2", command=self.on_sync_clicked)
         self.sync_btn.pack(side="right")
 
@@ -133,6 +164,80 @@ class ZvpnClientApp:
         # Footer
         footer = tk.Label(self.root, text="ZVPN Platform v3.0.0 · پشتیبانی از پروتکل بومی IKEv2", font=("Segoe UI", 8), fg="#64748b", bg="#0b1320", pady=8)
         footer.pack(side="bottom")
+
+    def bind_entry_shortcuts(self, entry):
+        """Enable Ctrl+V, Ctrl+C, Ctrl+A, Ctrl+X and Right-Click Context Menu on Entry."""
+        def _paste(event=None):
+            try:
+                text = self.root.clipboard_get()
+                if entry.select_present():
+                    entry.delete(tk.SEL_FIRST, tk.SEL_LAST)
+                entry.insert(tk.INSERT, text)
+            except Exception:
+                pass
+            return "break"
+
+        def _copy(event=None):
+            try:
+                if entry.select_present():
+                    text = entry.selection_get()
+                    self.root.clipboard_clear()
+                    self.root.clipboard_append(text)
+            except Exception:
+                pass
+            return "break"
+
+        def _cut(event=None):
+            try:
+                if entry.select_present():
+                    text = entry.selection_get()
+                    self.root.clipboard_clear()
+                    self.root.clipboard_append(text)
+                    entry.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            except Exception:
+                pass
+            return "break"
+
+        def _select_all(event=None):
+            entry.select_range(0, tk.END)
+            entry.icursor(tk.END)
+            return "break"
+
+        # Explicit key combinations
+        entry.bind("<Control-v>", _paste)
+        entry.bind("<Control-V>", _paste)
+        entry.bind("<Control-c>", _copy)
+        entry.bind("<Control-C>", _copy)
+        entry.bind("<Control-x>", _cut)
+        entry.bind("<Control-X>", _cut)
+        entry.bind("<Control-a>", _select_all)
+        entry.bind("<Control-A>", _select_all)
+        entry.bind("<Shift-Insert>", _paste)
+
+        # Right-click context menu
+        menu = tk.Menu(entry, tearoff=0, bg="#1e293b", fg="#f1f5f9", activebackground="#0284c7", activeforeground="#ffffff")
+        menu.add_command(label="جایگذاری (Paste)", command=_paste)
+        menu.add_command(label="کپی (Copy)", command=_copy)
+        menu.add_command(label="برش (Cut)", command=_cut)
+        menu.add_separator()
+        menu.add_command(label="انتخاب همه (Select All)", command=_select_all)
+        menu.add_command(label="پاک کردن (Clear)", command=lambda: entry.delete(0, tk.END))
+
+        def _show_menu(event):
+            menu.tk_popup(event.x_root, event.y_root)
+
+        entry.bind("<Button-3>", _show_menu)
+
+    def paste_clipboard_to_entry(self):
+        try:
+            clip = self.root.clipboard_get()
+            if clip:
+                self.sub_url.set(clip.strip())
+                self.url_entry.select_range(0, tk.END)
+                self.save_local_config()
+                self.on_sync_clicked()
+        except Exception:
+            messagebox.showinfo("کلیپ‌بورد", "متنی در کلیپ‌بورد یافت نشد.")
 
     def create_info_row(self, parent, title, val):
         row = tk.Frame(parent, bg="#112240", pady=3)
@@ -250,7 +355,7 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
 """
         try:
             cmd = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script]
-            subprocess.run(cmd, capture_output=True, timeout=15)
+            run_hidden(cmd, capture_output=True, timeout=15)
             self.root.after(0, lambda: self.status_text.set("کانکشن با موفقیت در ویندوز ثبت شد."))
         except Exception as e:
             self.root.after(0, lambda: self.status_text.set(f"خطا در ایجاد کانکشن: {e}"))
@@ -281,14 +386,13 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
             username = self.user_data.get("username", "")
             password = self.user_data.get("password", "")
 
-            # Dial using rasdial
-            res = subprocess.run(["rasdial.exe", vpn_name, username, password], capture_output=True, text=True)
+            # Dial using rasdial (completely hidden)
+            res = run_hidden(["rasdial.exe", vpn_name, username, password], capture_output=True, text=True)
             if res.returncode == 0:
                 self.root.after(0, lambda: self.update_connection_ui("connected", "متصل شد (IKEv2 Secured)"))
             else:
-                err_msg = res.stdout.strip() or res.stderr.strip()
-                # Open Windows Settings if non-interactive EAP requires prompt
-                subprocess.Popen(["cmd.exe", "/c", "start ms-settings:network-vpn"])
+                # Open Windows Settings if non-interactive EAP requires initial click
+                popen_hidden(["cmd.exe", "/c", "start ms-settings:network-vpn"])
                 self.root.after(0, lambda: self.update_connection_ui("disconnected", "آماده برای اتصال (پنجره ویندوز باز شد)"))
 
         threading.Thread(target=_do_connect, daemon=True).start()
@@ -296,14 +400,14 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
     def disconnect_vpn(self):
         self.connect_btn.config(state="disabled", text="در حال قطع...")
         def _do_disconnect():
-            subprocess.run(["rasdial.exe", self.vpn_name, "/disconnect"], capture_output=True)
+            run_hidden(["rasdial.exe", self.vpn_name, "/disconnect"], capture_output=True)
             self.root.after(0, lambda: self.update_connection_ui("disconnected", "اتصال قطع شد."))
         threading.Thread(target=_do_disconnect, daemon=True).start()
 
     def poll_connection_state(self):
-        while True:
+        while self._polling:
             try:
-                res = subprocess.run(["rasdial.exe"], capture_output=True, text=True)
+                res = run_hidden(["rasdial.exe"], capture_output=True, text=True)
                 out = res.stdout
                 is_active = self.vpn_name in out if self.vpn_name else False
                 if is_active and self.connection_state != "connected":
@@ -332,7 +436,7 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
             self.connect_btn.config(text="اتصال به ZVPN (Connect)", bg="#10b981", activebackground="#059669")
 
     def open_windows_vpn_settings(self):
-        subprocess.Popen(["cmd.exe", "/c", "start ms-settings:network-vpn"])
+        popen_hidden(["cmd.exe", "/c", "start ms-settings:network-vpn"])
 
 if __name__ == "__main__":
     root = tk.Tk()
