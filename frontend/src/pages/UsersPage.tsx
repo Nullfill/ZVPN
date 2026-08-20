@@ -85,12 +85,19 @@ export default function UsersPage() {
               <p className="text-xs text-slate-500">{u.note || '—'}</p>
             </div>
             <span className={statusBadge(u.status)}>{statusLabel(u.status)}</span>
-            <div>
-              <b>{fmtBytes(u.usageTotal)}</b>
-              <span className="text-xs text-slate-400"> / {u.totalLimitBytes ? fmtBytes(u.totalLimitBytes) : '∞'}</span>
+            <div className="space-y-1">
+              <div dir="ltr" className="flex items-baseline gap-1 font-mono text-xs">
+                <span className="font-bold text-slate-100 text-sm">{fmtBytes(u.usageTotal)}</span>
+                <span className="text-slate-500 text-[11px]">/ {u.totalLimitBytes ? fmtBytes(u.totalLimitBytes) : '∞'}</span>
+              </div>
               {!!u.totalLimitBytes && <ProgressBar value={Number(u.usageTotal) / Number(u.totalLimitBytes) * 100} />}
             </div>
-            <div><b>{fmtBytes(u.todayBytes)}</b><span className="text-xs text-slate-400"> / {u.dailyLimitBytes ? fmtBytes(u.dailyLimitBytes) : '∞'}</span></div>
+            <div>
+              <div dir="ltr" className="flex items-baseline gap-1 font-mono text-xs">
+                <span className="font-bold text-slate-100 text-sm">{fmtBytes(u.todayBytes)}</span>
+                <span className="text-slate-500 text-[11px]">/ {u.dailyLimitBytes ? fmtBytes(u.dailyLimitBytes) : '∞'}</span>
+              </div>
+            </div>
             <span className="text-xs">{u.remainingDays != null ? `${u.remainingDays} روز` : fmtDate(u.expiresAt)}</span>
             <span className={u.online ? 'text-emerald-400' : 'text-slate-500'}>{u.online ? `${u.online} آنلاین` : 'آفلاین'}</span>
             <div className="flex gap-1">

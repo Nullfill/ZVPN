@@ -83,20 +83,35 @@ export default function UserDetailPage() {
             <div className="flex justify-between gap-4"><dt className="text-slate-400">اولین اتصال</dt><dd>{fmtDate(u.firstConnectedAt)}</dd></div>
             <div className="flex justify-between gap-4"><dt className="text-slate-400">آخرین اتصال</dt><dd>{fmtDate(u.lastSeenAt)}</dd></div>
             <div className="flex justify-between gap-4"><dt className="text-slate-400">انقضا</dt><dd>{u.remainingDays != null ? `${u.remainingDays} روز` : fmtDate(u.expiresAt)}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-slate-400">دستگاه</dt><dd>{u.online} / {u.maxDevices}</dd></div>
+            <div className="flex justify-between gap-4"><dt className="text-slate-400">دستگاه</dt><dd dir="ltr" className="font-mono">{u.online} / {u.maxDevices}</dd></div>
             {u.note && <div className="flex justify-between gap-4"><dt className="text-slate-400">یادداشت</dt><dd>{u.note}</dd></div>}
           </dl>
         </GlassCard>
 
         <GlassCard>
-          <h3 className="mb-3 font-bold">مصرف</h3>
-          <p className="text-2xl font-bold">{fmtBytes(u.usageTotal)} <span className="text-sm font-normal text-slate-400">/ {u.totalLimitBytes ? fmtBytes(u.totalLimitBytes) : '∞'}</span></p>
+          <h3 className="mb-3 font-bold">مصرف ترافیک</h3>
+          <div dir="ltr" className="flex items-baseline gap-2 mb-2">
+            <span className="text-2xl font-bold font-mono text-white">{fmtBytes(u.usageTotal)}</span>
+            <span className="text-sm font-normal text-slate-400 font-mono">/ {u.totalLimitBytes ? fmtBytes(u.totalLimitBytes) : '∞'}</span>
+          </div>
           <ProgressBar value={totalPct} />
-          <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-            <div><span className="text-slate-400">روزانه</span><p>{fmtBytes(u.todayBytes)} / {u.dailyLimitBytes ? fmtBytes(u.dailyLimitBytes) : '∞'}</p></div>
-            <div><span className="text-slate-400">باقیمانده</span><p>{u.remainingTraffic != null ? fmtBytes(u.remainingTraffic) : '∞'}</p></div>
-            <div><span className="text-slate-400">دانلود</span><p>{fmtBytes(u.downloadBytes)}</p></div>
-            <div><span className="text-slate-400">آپلود</span><p>{fmtBytes(u.uploadBytes)}</p></div>
+          <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <span className="text-xs text-slate-400 block mb-1">مصرف روزانه</span>
+              <p dir="ltr" className="font-mono text-xs font-semibold">{fmtBytes(u.todayBytes)} <span className="text-slate-500">/ {u.dailyLimitBytes ? fmtBytes(u.dailyLimitBytes) : '∞'}</span></p>
+            </div>
+            <div>
+              <span className="text-xs text-slate-400 block mb-1">باقیمانده کل</span>
+              <p dir="ltr" className="font-mono text-xs font-semibold">{u.remainingTraffic != null ? fmtBytes(u.remainingTraffic) : '∞'}</p>
+            </div>
+            <div>
+              <span className="text-xs text-slate-400 block mb-1">دانلود</span>
+              <p dir="ltr" className="font-mono text-xs text-cyan-400">↓ {fmtBytes(u.downloadBytes)}</p>
+            </div>
+            <div>
+              <span className="text-xs text-slate-400 block mb-1">آپلود</span>
+              <p dir="ltr" className="font-mono text-xs text-indigo-400">↑ {fmtBytes(u.uploadBytes)}</p>
+            </div>
           </div>
         </GlassCard>
 

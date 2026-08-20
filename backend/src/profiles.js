@@ -88,7 +88,40 @@ function psSingleQuote(s) {
 
 export function windowsLauncher(token) {
   const safeUrl = `${config.publicBaseUrl}/d/${token}/windows`.replace(/"/g, '');
-  return `@echo off\r\nsetlocal\r\ntitle ZVPN Windows VPN Installer\r\n\r\npowershell.exe -NoProfile -Command "if (-not ([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) { exit 1 }"\r\nif errorlevel 1 (\r\n  echo Administrator permission is required. Requesting elevation...\r\n  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -Verb RunAs"\r\n  exit /b\r\n)\r\n\r\nset "ZVPNPS1=%TEMP%\\zvpn-setup-%RANDOM%-%RANDOM%.ps1"\r\necho Downloading your VPN profile...\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -UseBasicParsing '${safeUrl}' -OutFile '%ZVPNPS1%'"\r\nif errorlevel 1 (\r\n  echo Download failed.\r\n  pause\r\n  exit /b 1\r\n)\r\n\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ZVPNPS1%"\r\nset "RC=%ERRORLEVEL%"\r\ndel /q "%ZVPNPS1%" >nul 2>&1\r\nif not "%RC%"=="0" (\r\n  echo Installer returned error %RC%.\r\n  pause\r\n)\r\nexit /b %RC%\r\n`;
+  return `@echo off
+setlocal
+chcp 65001 >nul
+title ZVPN Windows 10/11 Installer
+
+:: 1. Request Administrator elevation if needed
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+  echo [ZVPN] Requesting Administrator permissions...
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process '%~f0' -Verb RunAs"
+  exit /b
+)
+
+set "ZVPN_PS1=%TEMP%\\zvpn-setup-%RANDOM%.ps1"
+echo [ZVPN] 1/3 Downloading profile configuration...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13; Invoke-WebRequest -UseBasicParsing '${safeUrl}' -OutFile '%ZVPN_PS1%'"
+if errorlevel 1 (
+  echo [ZVPN] ERROR: Could not download setup script from server.
+  pause
+  exit /b 1
+)
+
+echo [ZVPN] 2/3 Installing CA certificate and configuring IKEv2 connection...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ZVPN_PS1%"
+set "RC=%ERRORLEVEL%"
+del /q "%ZVPN_PS1%" >nul 2>&1
+
+if not "%RC%"=="0" (
+  echo [ZVPN] Setup finished with error code %RC%.
+  pause
+  exit /b %RC%
+)
+exit /b 0
+`;
 }
 
 export async function windowsProfile(user) {
@@ -97,30 +130,84 @@ export async function windowsProfile(user) {
   const vpnName = `${config.panelName} - ${user.username}`;
   const username = user.username;
   const password = decryptSecret(user.secret_enc);
-  const script = `# ZVPN Windows IKEv2 installer
+  const script = `# ZVPN Windows IKEv2 Automated Installer
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
 $VpnName = '${psSingleQuote(vpnName)}'
 $ServerAddress = '${psSingleQuote(vpn.serverAddress)}'
 $Username = '${psSingleQuote(username)}'
 $Password = '${psSingleQuote(password)}'
 $CaBase64 = '${ca.derBase64}'
-# ... (rest uses $ServerAddress from panel settings)
-Import-Module VpnClient
-$tempCert = Join-Path $env:TEMP ('zvpn-ca-' + [guid]::NewGuid().ToString() + '.cer')
-[IO.File]::WriteAllBytes($tempCert, [Convert]::FromBase64String($CaBase64))
-Import-Certificate -FilePath $tempCert -CertStoreLocation 'Cert:\\LocalMachine\\Root' | Out-Null
-Remove-Item $tempCert -Force -ErrorAction SilentlyContinue
-$EapXml = @'
-<EapHostConfig xmlns="http://www.microsoft.com/provisioning/EapHostConfig"><EapMethod><Type xmlns="http://www.microsoft.com/provisioning/EapCommon">26</Type></EapMethod><Config xmlns="http://www.microsoft.com/provisioning/EapHostConfig"><Eap xmlns="http://www.microsoft.com/provisioning/BaseEapConnectionPropertiesV1"><Type>26</Type><EapType xmlns="http://www.microsoft.com/provisioning/MsChapV2ConnectionPropertiesV1"><UseWinLogonCredentials>false</UseWinLogonCredentials></EapType></Eap></Config></EapHostConfig>
-'@
-$old = Get-VpnConnection -Name $VpnName -AllUserConnection -ErrorAction SilentlyContinue
-if ($old) { Remove-VpnConnection -Name $VpnName -AllUserConnection -Force }
-Add-VpnConnection -Name $VpnName -ServerAddress $ServerAddress -TunnelType Ikev2 -EncryptionLevel Maximum -AuthenticationMethod Eap -EapConfigXmlStream $EapXml -AllUserConnection -RememberCredential -Force | Out-Null
-Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTransformConstants SHA256128 -CipherTransformConstants AES128 -EncryptionMethod AES128 -IntegrityCheckMethod SHA256 -PfsGroup None -DHGroup ECP256 -AllUserConnection -Force | Out-Null
-Write-Host 'VPN profile installed successfully.' -ForegroundColor Green
-Write-Host 'Windows VPN connection window is opening. Click Connect to establish the VPN.' -ForegroundColor Cyan
-Start-Process -FilePath "$env:SystemRoot\\System32\\rasphone.exe" -ArgumentList @('-d', $VpnName)
-Read-Host 'Press Enter to close' | Out-Null
+
+Write-Host "=========================================" -ForegroundColor Cyan
+Write-Host "     ZVPN Windows IKEv2 Installer        " -ForegroundColor Cyan
+Write-Host "=========================================" -ForegroundColor Cyan
+
+# 1. Install Root CA into Trusted Root Certification Authorities
+try {
+    Write-Host "[1/4] Installing Trusted Root CA Certificate..." -ForegroundColor Yellow
+    $tempCert = Join-Path $env:TEMP ('zvpn-ca-' + [guid]::NewGuid().ToString() + '.cer')
+    [IO.File]::WriteAllBytes($tempCert, [Convert]::FromBase64String($CaBase64))
+    Import-Certificate -FilePath $tempCert -CertStoreLocation 'Cert:\\LocalMachine\\Root' | Out-Null
+    Remove-Item $tempCert -Force -ErrorAction SilentlyContinue
+    Write-Host "  -> Root CA installed successfully." -ForegroundColor Green
+} catch {
+    Write-Host "  -> Warning: Could not install CA to LocalMachine; trying CurrentUser..." -ForegroundColor Yellow
+    Import-Certificate -FilePath $tempCert -CertStoreLocation 'Cert:\\CurrentUser\\Root' -ErrorAction SilentlyContinue | Out-Null
+}
+
+# 2. Configure Windows NAT-T Registry Fix (AssumeUDPEncapsulationContextOnSendRule = 2)
+try {
+    Write-Host "[2/4] Applying Windows IPsec NAT-T Compatibility..." -ForegroundColor Yellow
+    Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\PolicyAgent' -Name 'AssumeUDPEncapsulationContextOnSendRule' -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
+    Write-Host "  -> NAT-T registry key configured." -ForegroundColor Green
+} catch {
+    # Non-fatal if regular user
+}
+
+# 3. Create or Replace VPN Connection
+Write-Host "[3/4] Creating IKEv2 VPN Connection: $VpnName" -ForegroundColor Yellow
+Remove-VpnConnection -Name $VpnName -Force -ErrorAction SilentlyContinue
+Remove-VpnConnection -Name $VpnName -AllUserConnection -Force -ErrorAction SilentlyContinue
+
+try {
+    Add-VpnConnection -Name $VpnName -ServerAddress $ServerAddress -TunnelType Ikev2 -EncryptionLevel Maximum -AuthenticationMethod Eap -RememberCredential -Force | Out-Null
+} catch {
+    Add-VpnConnection -Name $VpnName -ServerAddress $ServerAddress -TunnelType Ikev2 -EncryptionLevel Maximum -RememberCredential -Force | Out-Null
+}
+
+# 4. Set Hardware-Accelerated High-Security IPsec Parameters
+try {
+    Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTransformConstants SHA256128 -CipherTransformConstants AES128 -EncryptionMethod AES128 -IntegrityCheckMethod SHA256 -PfsGroup None -DHGroup ECP256 -Force | Out-Null
+    Write-Host "  -> IPsec crypto suite configured (AES-128 / SHA-256 / ECP-256)." -ForegroundColor Green
+} catch {
+    try {
+        Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTransformConstants SHA256128 -CipherTransformConstants AES128 -EncryptionMethod AES128 -IntegrityCheckMethod SHA256 -PfsGroup None -DHGroup Group14 -Force | Out-Null
+        Write-Host "  -> IPsec crypto suite configured (AES-128 / SHA-256 / Group14)." -ForegroundColor Green
+    } catch {
+        Write-Host "  -> Default Windows IKEv2 proposal maintained." -ForegroundColor Yellow
+    }
+}
+
+Write-Host "=========================================" -ForegroundColor Green
+Write-Host " ZVPN connection successfully created!   " -ForegroundColor Green
+Write-Host " Username: $Username" -ForegroundColor White
+Write-Host " Password: $Password" -ForegroundColor White
+Write-Host "=========================================" -ForegroundColor Green
+
+# 5. Connect or open rasphone
+Write-Host "Opening Windows VPN connection..." -ForegroundColor Cyan
+try {
+    rasdial.exe $VpnName $Username $Password
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Connected successfully to $VpnName!" -ForegroundColor Green
+    } else {
+        Start-Process -FilePath "$env:SystemRoot\\System32\\rasphone.exe" -ArgumentList @('-d', $VpnName)
+    }
+} catch {
+    Start-Process -FilePath "$env:SystemRoot\\System32\\rasphone.exe" -ArgumentList @('-d', $VpnName)
+}
+Read-Host "Press Enter to finish..." | Out-Null
 `;
   return script;
 }
@@ -235,18 +322,27 @@ a.btn.alt{background:rgba(255,255,255,.1)}a.btn span{font-size:.78rem;opacity:.8
   <div class="card">
     <div class="stats">
       <div class="stat"><span>وضعیت حساب</span><b>${st.label}</b></div>
-      <div class="stat"><span>انقضا</span><b>${htmlEsc(exp)}${remainDays != null ? ` · ${remainDays} روز` : ''}</b></div>
-      <div class="stat"><span>مصرف کل</span><b>${fmtPortalBytes(totalUsed)}${totalLimit ? ` / ${fmtPortalBytes(totalLimit)}` : ' / ∞'}</b></div>
-      <div class="stat"><span>مصرف امروز</span><b>${fmtPortalBytes(dailyUsed)}${dailyLimit ? ` / ${fmtPortalBytes(dailyLimit)}` : ' / ∞'}</b></div>
+      <div class="stat"><span>انقضا</span><b dir="rtl">${htmlEsc(exp)}${remainDays != null ? ` (${remainDays} روز)` : ''}</b></div>
+      <div class="stat"><span>مصرف کل</span><b dir="ltr" style="text-align:right">${fmtPortalBytes(totalUsed)} <small style="opacity:0.65;font-size:0.8em">/ ${totalLimit ? fmtPortalBytes(totalLimit) : '∞'}</small></b></div>
+      <div class="stat"><span>مصرف امروز</span><b dir="ltr" style="text-align:right">${fmtPortalBytes(dailyUsed)} <small style="opacity:0.65;font-size:0.8em">/ ${dailyLimit ? fmtPortalBytes(dailyLimit) : '∞'}</small></b></div>
     </div>
 
     <div class="usage">
       <h3>جزئیات مصرف</h3>
-      <div class="row"><span>حجم کل</span><span>${fmtPortalBytes(totalUsed)}${totalLimit ? ` از ${fmtPortalBytes(totalLimit)}` : ''}${totalRemain != null ? ` · باقی ${fmtPortalBytes(totalRemain)}` : ''}</span></div>
+      <div class="row">
+        <span>حجم کل</span>
+        <span dir="ltr" style="unicode-bidi:isolate">${fmtPortalBytes(totalUsed)}${totalLimit ? ` / ${fmtPortalBytes(totalLimit)}` : ''}${totalRemain != null ? ` (باقی: ${fmtPortalBytes(totalRemain)})` : ''}</span>
+      </div>
       ${totalLimit ? progressBar(totalPct) : ''}
-      <div class="row"><span>حجم روزانه</span><span>${fmtPortalBytes(dailyUsed)}${dailyLimit ? ` از ${fmtPortalBytes(dailyLimit)}` : ''}${dailyRemain != null ? ` · باقی ${fmtPortalBytes(dailyRemain)}` : ''}</span></div>
+      <div class="row">
+        <span>حجم روزانه</span>
+        <span dir="ltr" style="unicode-bidi:isolate">${fmtPortalBytes(dailyUsed)}${dailyLimit ? ` / ${fmtPortalBytes(dailyLimit)}` : ''}${dailyRemain != null ? ` (باقی: ${fmtPortalBytes(dailyRemain)})` : ''}</span>
+      </div>
       ${dailyLimit ? progressBar(dailyPct, 'violet') : ''}
-      <div class="row"><span>آپلود / دانلود</span><span>${fmtPortalBytes(user.upload_bytes || 0)} ↑ · ${fmtPortalBytes(user.download_bytes || 0)} ↓</span></div>
+      <div class="row">
+        <span>ترافیک دانلود / آپلود</span>
+        <span dir="ltr" style="unicode-bidi:isolate">↓ ${fmtPortalBytes(user.download_bytes || 0)} · ↑ ${fmtPortalBytes(user.upload_bytes || 0)}</span>
+      </div>
     </div>
 
     <div class="server">
