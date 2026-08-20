@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import os from 'node:os';
+import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { z } from 'zod';
@@ -14,7 +15,7 @@ import {
   revokeAdminSession, revokeAllAdminSessions,
 } from './auth.js';
 import { randomPassword } from './crypto.js';
-import { androidProfile, iosProfile, windowsProfile, windowsLauncher, downloadPageHtml } from './profiles.js';
+import { androidProfile, iosProfile, windowsProfile, windowsLauncher, downloadPageHtml, jsonProfile } from './profiles.js';
 import { audit } from './audit.js';
 import { getLiveSessions, startWorker, disconnectUser } from './worker.js';
 import { disconnectIkeId } from './vpn.js';
@@ -323,10 +324,28 @@ app.get('/d/:token', asyncHandler(async (req, res) => {
   res.type('html').send(html);
 }));
 
+app.get('/d/:token/json', asyncHandler(async (req, res) => {
+  const u = await tokenUser(req.params.token);
+  if (!u) return res.status(404).json({ error: 'Invalid or expired link' });
+  const today = await one(
+    'SELECT COALESCE(bytes,0)::bigint AS bytes FROM usage_daily WHERE user_id=$1 AND usage_date=(now() AT TIME ZONE $2)::date',
+    [u.id, config.timezone],
+  );
+  u.today_bytes = today?.bytes || 0;
+  res.json(await jsonProfile(u));
+}));
+
 app.get('/d/:token/android', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Type': 'application/vnd.strongswan.profile', 'Content-Disposition': `attachment; filename="${u.username}.sswan"` }); res.send(await androidProfile(u)); }));
 app.get('/d/:token/ios', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Type': 'application/x-apple-aspen-config', 'Content-Disposition': `attachment; filename="${u.username}.mobileconfig"` }); res.send(await iosProfile(u)); }));
 app.get('/d/:token/windows', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Disposition': `attachment; filename="${u.username}-windows-setup.ps1"` }); res.send(await windowsProfile(u)); }));
 app.get('/d/:token/windows-launcher', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Disposition': `attachment; filename="${u.username}-windows-install.cmd"` }); res.send(windowsLauncher(req.params.token)); }));
+
+app.get('/download/windows-client.exe', (req, res) => {
+  const exePath = path.resolve('clients/windows/dist/ZVPN-Windows-Client.exe');
+  res.download(exePath, 'ZVPN-Windows-Client.exe', (err) => {
+    if (err && !res.headersSent) res.status(404).send('Windows Client binary not packaged on server');
+  });
+});
 
 app.use(notFoundHandler);
 app.use(errorHandler);

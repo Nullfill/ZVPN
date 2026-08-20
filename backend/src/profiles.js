@@ -195,21 +195,41 @@ Write-Host " Username: $Username" -ForegroundColor White
 Write-Host " Password: $Password" -ForegroundColor White
 Write-Host "=========================================" -ForegroundColor Green
 
-# 5. Connect or open rasphone
-Write-Host "Opening Windows VPN connection..." -ForegroundColor Cyan
+# 5. Open Windows VPN Settings
+Write-Host "Opening Windows VPN Settings..." -ForegroundColor Cyan
 try {
-    rasdial.exe $VpnName $Username $Password
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "Connected successfully to $VpnName!" -ForegroundColor Green
-    } else {
-        Start-Process -FilePath "$env:SystemRoot\\System32\\rasphone.exe" -ArgumentList @('-d', $VpnName)
-    }
+    Start-Process "ms-settings:network-vpn"
+    Write-Host "Click '$VpnName' -> 'Connect' to start using VPN." -ForegroundColor Green
 } catch {
     Start-Process -FilePath "$env:SystemRoot\\System32\\rasphone.exe" -ArgumentList @('-d', $VpnName)
 }
+Write-Host ""
+Write-Host "Tip: You can also connect anytime from the Windows taskbar network tray!" -ForegroundColor Cyan
 Read-Host "Press Enter to finish..." | Out-Null
 `;
   return script;
+}
+
+export async function jsonProfile(user) {
+  const ca = await caInfo();
+  const vpn = await getVpnProfileConfig();
+  return {
+    username: user.username,
+    password: decryptSecret(user.secret_enc),
+    serverAddress: vpn.serverAddress,
+    remoteId: vpn.remoteId || vpn.serverAddress,
+    caCertificateBase64: ca.derBase64,
+    expiresAt: user.expires_at,
+    durationDays: user.duration_days,
+    activationStatus: user.activation_status,
+    enabled: user.enabled,
+    quotaBlocked: user.quota_blocked,
+    usageTotal: Number(user.usage_total || 0),
+    todayBytes: Number(user.today_bytes || 0),
+    totalLimitBytes: user.unlimited_traffic ? null : (user.total_limit_bytes ? Number(user.total_limit_bytes) : null),
+    dailyLimitBytes: user.daily_limit_bytes ? Number(user.daily_limit_bytes) : null,
+    unlimitedTraffic: user.unlimited_traffic,
+  };
 }
 
 function htmlEsc(s) {
@@ -354,21 +374,23 @@ a.btn.alt{background:rgba(255,255,255,.1)}a.btn span{font-size:.78rem;opacity:.8
   </div>
 
   <div class="card section">
-    <h2>دانلود پروفایل</h2>
+    <h2>دانلود کانکشن و نرم‌افزار</h2>
     <div class="btns">
+      <a class="btn" style="background:linear-gradient(135deg,#0284c7,#2563eb)" href="/download/windows-client.exe"><span>نرم‌افزار اختصاصی ZVPN (ویندوز ۱۰ و ۱۱)</span><strong>.exe</strong></a>
       <a class="btn" href="${htmlEsc(links.android)}"><span>Android — strongSwan</span><strong>.sswan</strong></a>
       <a class="btn" href="${htmlEsc(links.ios)}"><span>iPhone / iPad</span><strong>.mobileconfig</strong></a>
-      <a class="btn" href="${htmlEsc(links.windowsLauncher)}"><span>Windows 10/11 — نصب آسان</span><strong>.cmd</strong></a>
-      <a class="btn alt" href="${htmlEsc(links.windows)}"><span>Windows — پیشرفته (PowerShell)</span><strong>.ps1</strong></a>
+      <a class="btn alt" href="${htmlEsc(links.windowsLauncher)}"><span>Windows — اسکریپت خودکار</span><strong>.cmd</strong></a>
+      <a class="btn alt" href="${htmlEsc(links.windows)}"><span>Windows — اسکریپت PowerShell</span><strong>.ps1</strong></a>
     </div>
   </div>
 
   <div class="card section">
     <h2>راهنمای نصب</h2>
     <div class="guides">
+      <div class="guide"><b>Windows (نرم‌افزار اختصاصی)</b><p>۱) فایل ZVPN-Windows-Client.exe را دانلود و اجرا کنید. ۲) لینک همین صفحه را در کادر قرار دهید و دکمه «بروزرسانی» را بزنید. ۳) روی «اتصال به ZVPN» کلیک کنید.</p></div>
       <div class="guide"><b>Android</b><p>۱) strongSwan VPN Client را نصب کنید. ۲) فایل .sswan را باز کنید. ۳) Import و Connect — نام کاربری و رمز همان حساب VPN شماست.</p></div>
       <div class="guide"><b>iPhone / iPad</b><p>۱) فایل .mobileconfig را دانلود کنید. ۲) Settings → General → VPN &amp; Device Management → Install. ۳) Settings → VPN → Connect.</p></div>
-      <div class="guide"><b>Windows</b><p>۱) فایل .cmd را Run as Administrator اجرا کنید. ۲) پروفایل نصب می‌شود و پنجره VPN باز می‌شود. ۳) Connect را بزنید. اگر خطا داشتید نسخه .ps1 را امتحان کنید.</p></div>
+      <div class="guide"><b>Windows (بدون نرم‌افزار)</b><p>۱) فایل .cmd را Run as Administrator اجرا کنید. ۲) پنجره VPN باز می‌شود؛ روی Connect کلیک کنید.</p></div>
       <div class="guide"><b>نکته</b><p>اگر آدرس سرور عوض شد، پروفایل را دوباره از همین صفحه دانلود کنید. لینک را در اختیار دیگران قرار ندهید.</p></div>
     </div>
   </div>
