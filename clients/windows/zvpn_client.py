@@ -35,20 +35,6 @@ class RASDIALPARAMS(ctypes.Structure):
         ("dwIfIndex", wintypes.DWORD),
     ]
 
-class RASCONN(ctypes.Structure):
-    _fields_ = [
-        ("dwSize", wintypes.DWORD),
-        ("hrasconn", wintypes.HANDLE),
-        ("szEntryName", wintypes.WCHAR * 257),
-        ("szDeviceType", wintypes.WCHAR * 17),
-        ("szDeviceName", wintypes.WCHAR * 129),
-        ("szPhonebook", wintypes.WCHAR * 260),
-        ("dwSubEntry", wintypes.DWORD),
-        ("guidEntry", wintypes.BYTE * 16),
-        ("dwFlags", wintypes.DWORD),
-        ("luid", wintypes.BYTE * 8),
-    ]
-
 try:
     rasapi32 = ctypes.windll.rasapi32
 except Exception:
@@ -98,7 +84,7 @@ class ZvpnClientApp:
         self.load_local_config()
         self.setup_ui()
 
-        # Handle window close
+        # Handle window close cleanly
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         # Background monitors
@@ -379,7 +365,7 @@ class ZvpnClientApp:
                 for line in lines:
                     stripped = line.strip()
                     if stripped.startswith("[") and stripped.endswith("]"):
-                        in_section = (stripped == f"[{vpn_name}]")
+                        in_section = (stripped == f"[{vpn_name}]" or stripped.startswith("[ZVPN"))
                     if in_section:
                         if stripped.startswith("PreviewUserPw="):
                             line = "PreviewUserPw=0\n"
@@ -419,6 +405,7 @@ if ($CaBase64) {{
 Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\PolicyAgent' -Name 'AssumeUDPEncapsulationContextOnSendRule' -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
 
 Remove-VpnConnection -Name $VpnName -Force -ErrorAction SilentlyContinue
+Remove-VpnConnection -Name "ZVPN Panel - {username}" -Force -ErrorAction SilentlyContinue
 Add-VpnConnection -Name $VpnName -ServerAddress $ServerAddress -TunnelType Ikev2 -EncryptionLevel Maximum -AuthenticationMethod Eap -RememberCredential -Force | Out-Null
 Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTransformConstants SHA256128 -CipherTransformConstants AES128 -EncryptionMethod AES128 -IntegrityCheckMethod SHA256 -PfsGroup None -DHGroup ECP256 -Force | Out-Null
 """
@@ -506,36 +493,41 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
 
             # Also hangup any active connections with our name via rasdial
             run_hidden(["rasdial.exe", self.vpn_name, "/disconnect"], capture_output=True)
+            run_hidden(["rasdial.exe", f"ZVPN Panel - {self.user_data.get('username') if self.user_data else ''}", "/disconnect"], capture_output=True)
             self.root.after(0, lambda: self.update_connection_ui("disconnected", "اتصال قطع شد."))
 
         threading.Thread(target=_do_disconnect, daemon=True).start()
 
+    def is_vpn_active_in_windows(self):
+        """Reliably check if our VPN is connected in Windows."""
+        try:
+            r = run_hidden(["rasdial.exe"], capture_output=True, text=True)
+            out = r.stdout or ""
+            if "No connections" in out:
+                return False
+            uname = self.user_data.get("username", "") if self.user_data else ""
+            if uname and uname in out:
+                return True
+            if self.vpn_name and self.vpn_name in out:
+                return True
+            if "ZVPN" in out:
+                return True
+        except Exception:
+            pass
+        return False
+
     def active_connection_monitor(self):
-        """Monitor active connections using pure Win32 RasEnumConnections."""
+        """Continuously check VPN connection status."""
         while self._polling:
             try:
-                is_active = False
-                if rasapi32:
-                    ras_conns = (RASCONN * 32)()
-                    ras_conns[0].dwSize = ctypes.sizeof(RASCONN)
-                    cb = wintypes.DWORD(ctypes.sizeof(ras_conns))
-                    c_conns = wintypes.DWORD(0)
-
-                    ret = rasapi32.RasEnumConnectionsW(ctypes.byref(ras_conns), ctypes.byref(cb), ctypes.byref(c_conns))
-                    if ret == 0:
-                        for i in range(c_conns.value):
-                            if ras_conns[i].szEntryName == self.vpn_name:
-                                is_active = True
-                                self.active_hrasconn = ras_conns[i].hrasconn
-                                break
-
+                is_active = self.is_vpn_active_in_windows()
                 if is_active and self.connection_state != "connected":
                     self.root.after(0, lambda: self.update_connection_ui("connected", "متصل شد (IKEv2 Secured)"))
                 elif not is_active and self.connection_state == "connected":
                     self.root.after(0, lambda: self.update_connection_ui("disconnected", "قطع اتصال"))
             except Exception:
                 pass
-            time.sleep(2)
+            time.sleep(3)
 
     def ping_monitor_loop(self):
         """Continuously check latency when connected."""
