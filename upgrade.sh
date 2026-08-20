@@ -140,8 +140,14 @@ if grep -q 'conn ikev2-vpn' /etc/ipsec.conf 2>/dev/null; then
   /usr/local/sbin/zvpn-helper normalize-conn || warn "zvpn-helper normalize-conn returned non-zero"
 fi
 
-info "Configuring network performance & TCP MSS clamping (eliminates Windows/WiFi packet fragmentation)..."
+info "Configuring network performance, NAT Masquerade & TCP MSS clamping..."
 sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
+iptables -t nat -C POSTROUTING -s 10.0.0.0/8 -j MASQUERADE 2>/dev/null || \
+  iptables -t nat -A POSTROUTING -s 10.0.0.0/8 -j MASQUERADE 2>/dev/null || true
+iptables -C FORWARD -s 10.0.0.0/8 -j ACCEPT 2>/dev/null || \
+  iptables -A FORWARD -s 10.0.0.0/8 -j ACCEPT 2>/dev/null || true
+iptables -C FORWARD -d 10.0.0.0/8 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
+  iptables -A FORWARD -d 10.0.0.0/8 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
 iptables -t mangle -C FORWARD -p tcp -m tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \
   iptables -t mangle -A FORWARD -p tcp -m tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
 
