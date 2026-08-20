@@ -1,5 +1,6 @@
 """
 ZVPN Windows Client - Official Native IKEv2 Desktop Application
+Zero-Prompt Intelligent VPN Engine for Windows 10 & 11
 Author: ZVPN Panel Team (v3.0.0)
 """
 
@@ -13,6 +14,7 @@ import time
 import urllib.request
 import urllib.parse
 import ssl
+import re
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -46,12 +48,13 @@ class ZvpnClientApp:
     def __init__(self, root):
         self.root = root
         self.root.title("ZVPN - Windows IKEv2 Client")
-        self.root.geometry("560x670")
-        self.root.minsize(520, 640)
+        self.root.geometry("560x690")
+        self.root.minsize(520, 660)
         self.root.configure(bg="#0b1320")
 
         self.sub_url = tk.StringVar()
         self.status_text = tk.StringVar(value="آماده برای اتصال")
+        self.ping_text = tk.StringVar(value="—")
         self.connection_state = "disconnected" # "connected", "connecting", "disconnected"
         self.user_data = None
         self.vpn_name = "ZVPN"
@@ -63,8 +66,9 @@ class ZvpnClientApp:
         # Handle window close cleanly
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        # Check existing connection status on startup
+        # Background monitors
         threading.Thread(target=self.initial_status_check, daemon=True).start()
+        threading.Thread(target=self.ping_monitor_loop, daemon=True).start()
 
     def on_close(self):
         self._polling = False
@@ -94,7 +98,7 @@ class ZvpnClientApp:
         title_lbl = tk.Label(header, text="ZVPN Desktop Client", font=("Segoe UI", 16, "bold"), fg="#38bdf8", bg="#0f1d33")
         title_lbl.pack(anchor="w")
 
-        sub_lbl = tk.Label(header, text="اتصال پرسرعت و امن IKEv2 برای ویندوز ۱۰ و ۱۱", font=("Segoe UI", 9), fg="#94a3b8", bg="#0f1d33")
+        sub_lbl = tk.Label(header, text="اتصال پرسرعت، هوشمند و امن IKEv2 برای ویندوز ۱۰ و ۱۱", font=("Segoe UI", 9), fg="#94a3b8", bg="#0f1d33")
         sub_lbl.pack(anchor="w", pady=(2, 0))
 
         # Main Container
@@ -124,7 +128,7 @@ class ZvpnClientApp:
 
         # 2. Account Details Card
         self.info_card = tk.LabelFrame(main, text=" اطلاعات حساب کاربری ", font=("Segoe UI", 10, "bold"), fg="#94a3b8", bg="#112240", padx=15, pady=12)
-        self.info_card.pack(fill="x", pady=(0, 15))
+        self.info_card.pack(fill="x", pady=(0, 14))
 
         self.lbl_username = self.create_info_row(self.info_card, "نام کاربر:", "—")
         self.lbl_traffic = self.create_info_row(self.info_card, "مصرف ترافیک:", "—")
@@ -133,8 +137,8 @@ class ZvpnClientApp:
         self.lbl_server = self.create_info_row(self.info_card, "سرور VPN:", "—")
 
         # 3. Connection Status Card
-        status_card = tk.Frame(main, bg="#112240", padx=15, pady=15, relief="flat", highlightthickness=1, highlightbackground="#1e3a8a")
-        status_card.pack(fill="x", pady=(0, 15))
+        status_card = tk.Frame(main, bg="#112240", padx=15, pady=14, relief="flat", highlightthickness=1, highlightbackground="#1e3a8a")
+        status_card.pack(fill="x", pady=(0, 14))
 
         self.status_icon = tk.Label(status_card, text="●", font=("Segoe UI", 24), fg="#ef4444", bg="#112240")
         self.status_icon.pack(side="left", padx=(5, 12))
@@ -148,21 +152,28 @@ class ZvpnClientApp:
         self.status_detail = tk.Label(status_text_frame, textvariable=self.status_text, font=("Segoe UI", 9), fg="#94a3b8", bg="#112240")
         self.status_detail.pack(anchor="w")
 
+        # Ping Tag
+        ping_frame = tk.Frame(status_card, bg="#112240")
+        ping_frame.pack(side="right", padx=5)
+        tk.Label(ping_frame, text="پینگ", font=("Segoe UI", 8), fg="#64748b", bg="#112240").pack()
+        self.ping_lbl = tk.Label(ping_frame, textvariable=self.ping_text, font=("Consolas", 10, "bold"), fg="#38bdf8", bg="#112240")
+        self.ping_lbl.pack()
+
         # 4. Action Buttons
-        self.connect_btn = tk.Button(main, text="اتصال به ZVPN (Connect)", font=("Segoe UI", 12, "bold"), bg="#10b981", fg="#ffffff", activebackground="#059669", activeforeground="#ffffff", relief="flat", pady=10, cursor="hand2", command=self.on_toggle_connect)
+        self.connect_btn = tk.Button(main, text="اتصال به ZVPN (Connect)", font=("Segoe UI", 12, "bold"), bg="#10b981", fg="#ffffff", activebackground="#059669", activeforeground="#ffffff", relief="flat", pady=11, cursor="hand2", command=self.on_toggle_connect)
         self.connect_btn.pack(fill="x", pady=(0, 10))
 
         btn_row = tk.Frame(main, bg="#0b1320")
         btn_row.pack(fill="x")
 
-        self.setup_btn = tk.Button(btn_row, text="نصب مجدد کانکشن در ویندوز", font=("Segoe UI", 9), bg="#1e293b", fg="#cbd5e1", activebackground="#334155", activeforeground="#ffffff", relief="flat", pady=6, cursor="hand2", command=self.on_reinstall_connection)
+        self.setup_btn = tk.Button(btn_row, text="تنظیم مجدد کانکشن", font=("Segoe UI", 9), bg="#1e293b", fg="#cbd5e1", activebackground="#334155", activeforeground="#ffffff", relief="flat", pady=6, cursor="hand2", command=self.on_reinstall_connection)
         self.setup_btn.pack(side="left", fill="x", expand=True, padx=(0, 5))
 
-        self.win_settings_btn = tk.Button(btn_row, text="تنظیمات VPN ویندوز", font=("Segoe UI", 9), bg="#1e293b", fg="#cbd5e1", activebackground="#334155", activeforeground="#ffffff", relief="flat", pady=6, cursor="hand2", command=self.open_windows_vpn_settings)
+        self.win_settings_btn = tk.Button(btn_row, text="تنظیمات ویندوز", font=("Segoe UI", 9), bg="#1e293b", fg="#cbd5e1", activebackground="#334155", activeforeground="#ffffff", relief="flat", pady=6, cursor="hand2", command=self.open_windows_vpn_settings)
         self.win_settings_btn.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
         # Footer
-        footer = tk.Label(self.root, text="ZVPN Platform v3.0.0 · پشتیبانی از پروتکل بومی IKEv2", font=("Segoe UI", 8), fg="#64748b", bg="#0b1320", pady=8)
+        footer = tk.Label(self.root, text="ZVPN Platform v3.0.0 · اتصال هوشمند درون‌برنامه‌ای IKEv2", font=("Segoe UI", 8), fg="#64748b", bg="#0b1320", pady=8)
         footer.pack(side="bottom")
 
     def bind_entry_shortcuts(self, entry):
@@ -326,8 +337,41 @@ class ZvpnClientApp:
         else:
             self.lbl_expire.config(text="نامحدود")
 
+    def configure_silent_pbk(self, vpn_name):
+        """Configure rasphone.pbk so Windows NEVER prompts for username/password dialogs."""
+        paths = [
+            os.path.expandvars(r"%APPDATA%\Microsoft\Network\Connections\Pbk\rasphone.pbk"),
+            os.path.expandvars(r"%ProgramData%\Microsoft\Network\Connections\Pbk\rasphone.pbk"),
+        ]
+        for pbk in paths:
+            if not os.path.exists(pbk):
+                continue
+            try:
+                with open(pbk, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = f.readlines()
+                new_lines = []
+                in_section = False
+                for line in lines:
+                    stripped = line.strip()
+                    if stripped.startswith("[") and stripped.endswith("]"):
+                        in_section = (stripped == f"[{vpn_name}]")
+                    if in_section:
+                        if stripped.startswith("PreviewUserPw="):
+                            line = "PreviewUserPw=0\n"
+                        elif stripped.startswith("PreviewDomain="):
+                            line = "PreviewDomain=0\n"
+                        elif stripped.startswith("PreviewPhoneNumber="):
+                            line = "PreviewPhoneNumber=0\n"
+                        elif stripped.startswith("ShowDialingProgress="):
+                            line = "ShowDialingProgress=0\n"
+                    new_lines.append(line)
+                with open(pbk, "w", encoding="utf-8") as f:
+                    f.writelines(new_lines)
+            except Exception:
+                pass
+
     def install_windows_profile(self, data):
-        self.status_text.set("در حال پیکربندی کانکشن IKEv2 در ویندوز...")
+        self.status_text.set("در حال پیکربندی خودکار کانکشن در ویندوز...")
         vpn_name = self.vpn_name
         server = data.get("serverAddress")
         username = data.get("username")
@@ -356,7 +400,9 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
         try:
             cmd = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script]
             run_hidden(cmd, capture_output=True, timeout=15)
-            self.root.after(0, lambda: self.status_text.set("کانکشن با موفقیت در ویندوز ثبت شد."))
+            # Remove dialog prompts from phonebook
+            self.configure_silent_pbk(vpn_name)
+            self.root.after(0, lambda: self.status_text.set("کانکشن با موفقیت و بدون نیاز به ورود رمز پیکربندی شد."))
         except Exception as e:
             self.root.after(0, lambda: self.status_text.set(f"خطا در ایجاد کانکشن: {e}"))
 
@@ -378,22 +424,30 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
 
     def connect_vpn(self):
         self.connection_state = "connecting"
-        self.update_connection_ui("connecting", "در حال برقراری اتصال...")
-        self.connect_btn.config(state="disabled", text="در حال اتصال...")
+        self.update_connection_ui("connecting", "در حال برقراری اتصال هوشمند...")
+        self.connect_btn.config(state="disabled", text="در حال برقراری اتصال...")
 
         def _do_connect():
             vpn_name = self.vpn_name
             username = self.user_data.get("username", "")
             password = self.user_data.get("password", "")
 
-            # Dial using rasdial (completely hidden)
+            # Make sure PBK is silent before dialing
+            self.configure_silent_pbk(vpn_name)
+
+            # Dial silently using rasdial with saved credentials
             res = run_hidden(["rasdial.exe", vpn_name, username, password], capture_output=True, text=True)
             if res.returncode == 0:
                 self.root.after(0, lambda: self.update_connection_ui("connected", "متصل شد (IKEv2 Secured)"))
             else:
-                # Open Windows Settings if non-interactive EAP requires initial click
-                popen_hidden(["cmd.exe", "/c", "start ms-settings:network-vpn"])
-                self.root.after(0, lambda: self.update_connection_ui("disconnected", "آماده برای اتصال (پنجره ویندوز باز شد)"))
+                err_msg = (res.stdout or res.stderr or "").strip()
+                print(f"[rasdial error]: {err_msg}")
+                # Try simple dial if credentials already cached
+                res2 = run_hidden(["rasdial.exe", vpn_name], capture_output=True, text=True)
+                if res2.returncode == 0:
+                    self.root.after(0, lambda: self.update_connection_ui("connected", "متصل شد (IKEv2 Secured)"))
+                else:
+                    self.root.after(0, lambda: self.update_connection_ui("disconnected", f"خطا در اتصال: {err_msg[:45]}"))
 
         threading.Thread(target=_do_connect, daemon=True).start()
 
@@ -411,12 +465,30 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
                 out = res.stdout
                 is_active = self.vpn_name in out if self.vpn_name else False
                 if is_active and self.connection_state != "connected":
-                    self.root.after(0, lambda: self.update_connection_ui("connected", "اتصال فعال است"))
+                    self.root.after(0, lambda: self.update_connection_ui("connected", "متصل شد (IKEv2 Secured)"))
                 elif not is_active and self.connection_state == "connected":
                     self.root.after(0, lambda: self.update_connection_ui("disconnected", "قطع اتصال"))
             except Exception:
                 pass
             time.sleep(3)
+
+    def ping_monitor_loop(self):
+        """Continuously check latency when connected."""
+        while self._polling:
+            if self.connection_state == "connected":
+                try:
+                    res = run_hidden(["ping.exe", "-n", "1", "-w", "1500", "1.1.1.1"], capture_output=True, text=True)
+                    if "time=" in res.stdout or "time<" in res.stdout:
+                        match = re.search(r"time[=<](\d+)ms", res.stdout)
+                        ms = match.group(1) if match else "OK"
+                        self.root.after(0, lambda: self.ping_text.set(f"{ms} ms"))
+                    else:
+                        self.root.after(0, lambda: self.ping_text.set("Timeout"))
+                except Exception:
+                    self.root.after(0, lambda: self.ping_text.set("—"))
+            else:
+                self.root.after(0, lambda: self.ping_text.set("—"))
+            time.sleep(5)
 
     def update_connection_ui(self, state, msg):
         self.connection_state = state
