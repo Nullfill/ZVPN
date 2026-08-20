@@ -53,8 +53,9 @@ echo
 warn "strongSwan will restart once; active VPN sessions will reconnect."
 
 info "Creating pre-upgrade backup..."
-if [[ -x "$SOURCE_DIR/backup.sh" ]]; then
-  BACKUP_PATH="$("$SOURCE_DIR/backup.sh")"
+if [[ -f "$SOURCE_DIR/backup.sh" ]]; then
+  chmod +x "$SOURCE_DIR/backup.sh" 2>/dev/null || true
+  BACKUP_PATH="$(bash "$SOURCE_DIR/backup.sh")"
   ok "Backup: $BACKUP_PATH"
 else
   die "backup.sh not found in release directory"
@@ -206,8 +207,8 @@ fi
 nginx -t >/dev/null 2>&1 && ok "Nginx config OK (HTTPS preserved)" || warn "nginx -t failed — check manually"
 
 echo
-if [[ -x "$APP_DIR/doctor.sh" ]]; then
-  "$APP_DIR/doctor.sh" || true
+if [[ -f "$APP_DIR/doctor.sh" ]]; then
+  bash "$APP_DIR/doctor.sh" || true
 fi
 
 echo
