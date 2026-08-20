@@ -179,23 +179,30 @@ case "$ACTION" in
           target_seen=1
           print
           print "    keyexchange=ikev2"
+          print "    auto=add"
+          print "    fragmentation=yes"
+          print "    mobike=yes"
+          print "    reauth=no"
+          print "    rekey=no"
+          print "    forceencaps=yes"
           print "    dpdaction=clear"
           print "    dpddelay=30s"
           print "    dpdtimeout=120s"
-          print "    rekey=no"
-          print "    forceencaps=yes"
           print "    ike=aes128-sha256-ecp256,aes128-sha256-modp2048,aes256-sha256-modp2048,aes128-sha1-modp1024,aes256-sha1-modp1024"
           print "    esp=aes128-sha256,aes256-sha256,aes128-sha1,aes256-sha1"
           next
         }
       }
       setup && /^[[:space:]]*uniqueids[[:space:]]*=/ { print "    uniqueids=never"; setup_seen_unique=1; next }
-      target && /^[[:space:]]*(keyexchange|dpdaction|dpddelay|dpdtimeout|rekey|forceencaps|ike|esp)[[:space:]]*=/ { next }
+      target && /^[[:space:]]*(keyexchange|auto|fragmentation|mobike|reauth|rekey|forceencaps|dpdaction|dpddelay|dpdtimeout|ike|esp)[[:space:]]*=/ { next }
       { print }
       END { if (setup && !setup_seen_unique) print "    uniqueids=never"; if (!target_seen) exit 4 }
     ' "$IPSEC_CONF" > "$TMP" || { rm -f "$TMP"; echo "conn ikev2-vpn missing" >&2; exit 3; }
     install -o root -g root -m 600 "$TMP" "$IPSEC_CONF"
     rm -f "$TMP"
+    ;;
+  strongswan-logs)
+    journalctl -u strongswan-starter -u strongswan -n 250 --no-pager 2>/dev/null || cat /var/log/charon.log 2>/dev/null || true
     ;;
   restart-strongswan)
     systemctl restart strongswan-starter

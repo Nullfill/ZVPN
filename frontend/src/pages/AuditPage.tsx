@@ -1,17 +1,22 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Filter, Search, RefreshCw, AlertCircle, AlertTriangle, Info, Eye, X, Terminal } from 'lucide-react';
+import { Filter, Search, RefreshCw, AlertCircle, AlertTriangle, Info, Eye, X, Terminal, Server, Copy, Check } from 'lucide-react';
 import { api, ObservabilityEventsResponse, ObservabilityStatsResponse, SystemEvent } from '../lib/api';
 import { fmtDate } from '../lib/format';
 import { EmptyState, GlassCard, Modal, PageHeader, SkeletonGrid, TableShell } from '../components/UI';
+import { useToast } from '../components/Toast';
 
 const PAGE_SIZE = 25;
 
 export default function AuditPage() {
+  const toast = useToast();
+  const [tab, setTab] = useState<'events' | 'strongswan'>('events');
   const [query, setQuery] = useState('');
   const [level, setLevel] = useState('');
   const [page, setPage] = useState(1);
   const [selectedEvent, setSelectedEvent] = useState<SystemEvent | null>(null);
+  const [swanSearch, setSwanSearch] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const { data: eventsData, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['observability-events', page, query, level],
@@ -20,6 +25,14 @@ export default function AuditPage() {
         `/api/observability/events?page=${page}&pageSize=${PAGE_SIZE}&q=${encodeURIComponent(query)}&level=${level}`
       ),
     refetchInterval: 15_000,
+    enabled: tab === 'events',
+  });
+
+  const { data: swanLogsData, isLoading: swanLoading, refetch: refetchSwan, isFetching: swanFetching } = useQuery({
+    queryKey: ['strongswan-logs'],
+    queryFn: () => api<{ logs: string }>('/api/observability/strongswan-logs'),
+    refetchInterval: tab === 'strongswan' ? 5_000 : false,
+    enabled: tab === 'strongswan',
   });
 
   const { data: statsData } = useQuery({
@@ -32,6 +45,23 @@ export default function AuditPage() {
   const totalCount = eventsData?.total || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const stats = statsData?.stats || { error: 0, warn: 0, info: 0, debug: 0 };
+
+  const filteredSwanLogs = useMemo(() => {
+    const raw = swanLogsData?.logs || '';
+    if (!swanSearch.trim()) return raw;
+    const lines = raw.split('\n');
+    const q = swanSearch.trim().toLowerCase();
+    return lines.filter((l) => l.toLowerCase().includes(q)).join('\n');
+  }, [swanLogsData, swanSearch]);
+
+  const copySwanLogs = () => {
+    if (swanLogsData?.logs) {
+      navigator.clipboard.writeText(swanLogsData.logs);
+      setCopied(true);
+      toast('لاگ‌های strongSwan کپی شدند.', 'success');
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   function levelBadge(lvl: string) {
     switch (lvl) {
@@ -51,13 +81,83 @@ export default function AuditPage() {
     <div className="space-y-6">
       <PageHeader
         title="لاگ‌ها و Observability"
-        description="رویدادهای امنیتی، تغییرات مدیریتی، لاگ‌های strongSwan و سلامت سرور."
+        description="رویدادهای امنیتی، تغییرات مدیریتی، لاگ‌های لایه شبکه strongSwan و سلامت سرور."
         action={
-          <button className="btn-ghost" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} /> بازخوانی
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              className="btn-ghost"
+              onClick={() => {
+                if (tab === 'events') refetch();
+                else refetchSwan();
+              }}
+              disabled={isFetching || swanFetching}
+            >
+              <RefreshCw size={16} className={isFetching || swanFetching ? 'animate-spin' : ''} /> بازخوانی
+            </button>
+          </div>
         }
       />
+
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-[var(--line)] pb-3">
+        <button
+          className={`nav-item ${tab === 'events' ? 'active font-bold' : ''}`}
+          onClick={() => setTab('events')}
+        >
+          <Terminal size={18} /> رویدادهای سیستم و ادمین
+        </button>
+        <button
+          className={`nav-item ${tab === 'strongswan' ? 'active font-bold text-cyan-400' : ''}`}
+          onClick={() => setTab('strongswan')}
+        >
+          <Server size={18} /> لاگ زنده دیمن strongSwan / Charon
+        </button>
+      </div>
+
+      {tab === 'strongswan' && (
+        <div className="space-y-4">
+          <GlassCard className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-bold flex items-center gap-2">
+                  <Server size={18} className="text-cyan-400" />
+                  لاگ‌های لحظه‌ای سرویس strongSwan (IKEv2 Engine)
+                </h3>
+                <p className="text-xs text-muted mt-1">
+                  مشاهده دلیل دقیق قطعی کلاینت‌ها (مانند DPD Timeout، AUTH_FAILED، تغییر IP، عدم تطابق رمز یا انقضای کلید).
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button className="btn-ghost text-xs" onClick={copySwanLogs}>
+                  {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />} کپی کل لاگ‌ها
+                </button>
+                <span className="status-pill"><i /> بازخوانی هر ۵ ثانیه</span>
+              </div>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
+              <input
+                className="input pr-9 text-xs"
+                placeholder="جستجو در لاگ‌های strongSwan (مثلاً نام کاربر، DELETE، error، timeout)..."
+                value={swanSearch}
+                onChange={(e) => setSwanSearch(e.target.value)}
+              />
+            </div>
+
+            {swanLoading ? (
+              <SkeletonGrid n={1} />
+            ) : (
+              <pre className="max-h-[500px] overflow-auto rounded-xl bg-black/60 p-4 text-xs font-mono text-emerald-300 border border-[var(--line)] whitespace-pre-wrap leading-relaxed">
+                {filteredSwanLogs || 'در حال دریافت لاگ‌ها یا هیچ لاگی یافت نشد.'}
+              </pre>
+            )}
+          </GlassCard>
+        </div>
+      )}
+
+      {tab === 'events' && (
+        <>
 
       {/* KPI Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -217,6 +317,8 @@ export default function AuditPage() {
             </div>
           )}
         </GlassCard>
+      )}
+      </>
       )}
 
       {/* Event Details Modal */}

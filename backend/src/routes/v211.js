@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { config } from '../config.js';
 import { exportPanelBackup, importPanelBackup } from '../services/backup.js';
 import { getVpnProfileConfig } from '../services/vpnConfig.js';
 import { listEvents, getEventStats } from '../services/observability.js';
@@ -7,10 +10,24 @@ import {
 } from '../services/vpnEndpointManager.js';
 import { apiError, endpointError } from '../utils/errors.js';
 
+const execFileAsync = promisify(execFile);
+
 /** Mount v2.1 routes on existing Express app */
 export function mountV211Routes(app, ctx) {
   const { requireAdmin, requireRole, audit, clientIp, asyncHandler } = ctx;
   const adminOnly = requireRole('admin');
+
+  app.get('/api/observability/strongswan-logs', requireAdmin, asyncHandler(async (_req, res) => {
+    try {
+      const { stdout } = await execFileAsync('sudo', [config.helper, 'strongswan-logs'], {
+        timeout: 15000,
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      res.json({ logs: stdout || 'No strongSwan logs available.' });
+    } catch (e) {
+      res.json({ logs: `strongSwan log fetch output:\n${e.stdout || e.stderr || e.message}` });
+    }
+  }));
 
   app.get('/api/observability/events', requireAdmin, asyncHandler(async (req, res) => {
     const page = Math.max(1, Number(req.query.page) || 1);

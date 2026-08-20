@@ -119,7 +119,7 @@ info "Installing updated restricted helper..."
 install -o root -g root -m 0700 -d /var/lib/zvpn-panel /var/lib/zvpn-panel/endpoint-backups
 install -o root -g root -m 0755 "$APP_DIR/ops/helper/zvpn-helper" /usr/local/sbin/zvpn-helper
 cat > /etc/sudoers.d/zvpn-panel <<'SUDOERS'
-zvpn ALL=(root) NOPASSWD: /usr/local/sbin/zvpn-helper sync-secrets, /usr/local/sbin/zvpn-helper reread-secrets, /usr/local/sbin/zvpn-helper list-sas, /usr/local/sbin/zvpn-helper terminate *, /usr/local/sbin/zvpn-helper status, /usr/local/sbin/zvpn-helper cert-info, /usr/local/sbin/zvpn-helper resolve-host *, /usr/local/sbin/zvpn-helper check-ike-ports, /usr/local/sbin/zvpn-helper endpoint-backup, /usr/local/sbin/zvpn-helper endpoint-rollback /var/lib/zvpn-panel/endpoint-backups/*, /usr/local/sbin/zvpn-helper issue-server-cert *, /usr/local/sbin/zvpn-helper set-leftid *, /usr/local/sbin/zvpn-helper normalize-conn, /usr/local/sbin/zvpn-helper restart-strongswan
+zvpn ALL=(root) NOPASSWD: /usr/local/sbin/zvpn-helper sync-secrets, /usr/local/sbin/zvpn-helper reread-secrets, /usr/local/sbin/zvpn-helper list-sas, /usr/local/sbin/zvpn-helper terminate *, /usr/local/sbin/zvpn-helper status, /usr/local/sbin/zvpn-helper cert-info, /usr/local/sbin/zvpn-helper resolve-host *, /usr/local/sbin/zvpn-helper check-ike-ports, /usr/local/sbin/zvpn-helper endpoint-backup, /usr/local/sbin/zvpn-helper endpoint-rollback /var/lib/zvpn-panel/endpoint-backups/*, /usr/local/sbin/zvpn-helper issue-server-cert *, /usr/local/sbin/zvpn-helper set-leftid *, /usr/local/sbin/zvpn-helper normalize-conn, /usr/local/sbin/zvpn-helper strongswan-logs, /usr/local/sbin/zvpn-helper restart-strongswan
 SUDOERS
 chmod 440 /etc/sudoers.d/zvpn-panel
 visudo -cf /etc/sudoers.d/zvpn-panel >/dev/null
@@ -134,33 +134,10 @@ if ! grep -q '^include /etc/ipsec.d/zvpn-users.secrets$' /etc/ipsec.secrets; the
   echo 'include /etc/ipsec.d/zvpn-users.secrets' >> /etc/ipsec.secrets
 fi
 
-info "Applying Windows-compatible IKE/ESP proposals (conn ikev2-vpn)..."
+info "Normalizing strongSwan configuration (Mobile fragmentation, MOBIKE, reauth=no, proposals)..."
 if grep -q 'conn ikev2-vpn' /etc/ipsec.conf 2>/dev/null; then
   cp -a /etc/ipsec.conf "/etc/ipsec.conf.pre-zvpn-${NEW_VERSION}-$(date +%s)"
-  python3 - <<'PY'
-from pathlib import Path
-import re
-p = Path('/etc/ipsec.conf')
-lines = p.read_text().splitlines()
-start = None
-end = len(lines)
-for i, line in enumerate(lines):
-    if re.match(r'^\s*conn\s+ikev2-vpn\s*$', line):
-        start = i
-        break
-if start is None:
-    raise SystemExit("conn ikev2-vpn not found — skipped")
-for i in range(start + 1, len(lines)):
-    if re.match(r'^\s*conn\s+', lines[i]):
-        end = i
-        break
-block = lines[start:end]
-block = [x for x in block if not re.match(r'^\s*(ike|esp)\s*=', x)]
-block.insert(1, '    ike=aes128-sha256-ecp256,aes128-sha256-modp2048,aes256-sha256-modp2048')
-block.insert(2, '    esp=aes128-sha256,aes256-sha256')
-lines[start:end] = block
-p.write_text('\n'.join(lines) + '\n')
-PY
+  /usr/local/sbin/zvpn-helper normalize-conn || warn "zvpn-helper normalize-conn returned non-zero"
 fi
 
 info "Ensuring Node.js 20+ runtime and building assets..."
