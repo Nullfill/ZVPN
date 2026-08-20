@@ -1,6 +1,6 @@
 """
 ZVPN Windows Client - Official Native IKEv2 Desktop Application
-Zero-Prompt Intelligent VPN Engine for Windows 10 & 11
+Pure Win32 Zero-Prompt In-App Engine for Windows 10 & 11
 Author: ZVPN Panel Team (v3.0.0)
 """
 
@@ -15,23 +15,56 @@ import urllib.request
 import urllib.parse
 import ssl
 import re
+import ctypes
+from ctypes import wintypes
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-# Windows-specific constants for hidden process execution
+# --- Win32 Native RAS Definitions ---
+class RASDIALPARAMS(ctypes.Structure):
+    _fields_ = [
+        ("dwSize", wintypes.DWORD),
+        ("szEntryName", wintypes.WCHAR * 257),
+        ("szPhoneNumber", wintypes.WCHAR * 129),
+        ("szCallbackNumber", wintypes.WCHAR * 129),
+        ("szUserName", wintypes.WCHAR * 257),
+        ("szPassword", wintypes.WCHAR * 257),
+        ("szDomain", wintypes.WCHAR * 16),
+        ("dwSubEntry", wintypes.DWORD),
+        ("dwCallbackId", ctypes.c_size_t),
+        ("dwIfIndex", wintypes.DWORD),
+    ]
+
+class RASCONN(ctypes.Structure):
+    _fields_ = [
+        ("dwSize", wintypes.DWORD),
+        ("hrasconn", wintypes.HANDLE),
+        ("szEntryName", wintypes.WCHAR * 257),
+        ("szDeviceType", wintypes.WCHAR * 17),
+        ("szDeviceName", wintypes.WCHAR * 129),
+        ("szPhonebook", wintypes.WCHAR * 260),
+        ("dwSubEntry", wintypes.DWORD),
+        ("guidEntry", wintypes.BYTE * 16),
+        ("dwFlags", wintypes.DWORD),
+        ("luid", wintypes.BYTE * 8),
+    ]
+
+try:
+    rasapi32 = ctypes.windll.rasapi32
+except Exception:
+    rasapi32 = None
+
 CREATE_NO_WINDOW = 0x08000000
 
 def run_hidden(cmd, **kwargs):
-    """Run a subprocess completely hidden without flashing any CMD windows."""
     kwargs["creationflags"] = CREATE_NO_WINDOW
     si = subprocess.STARTUPINFO()
     si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    si.wShowWindow = 0 # SW_HIDE
+    si.wShowWindow = 0
     kwargs["startupinfo"] = si
     return subprocess.run(cmd, **kwargs)
 
 def popen_hidden(cmd, **kwargs):
-    """Spawn a background process completely hidden."""
     kwargs["creationflags"] = CREATE_NO_WINDOW
     si = subprocess.STARTUPINFO()
     si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -39,9 +72,10 @@ def popen_hidden(cmd, **kwargs):
     kwargs["startupinfo"] = si
     return subprocess.Popen(cmd, **kwargs)
 
-# Windows-specific app data folder
+# App Data paths
 APP_DATA_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "ZVPN")
 CONFIG_FILE = os.path.join(APP_DATA_DIR, "config.json")
+USER_PBK = os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Network\Connections\Pbk\rasphone.pbk")
 os.makedirs(APP_DATA_DIR, exist_ok=True)
 
 class ZvpnClientApp:
@@ -58,16 +92,18 @@ class ZvpnClientApp:
         self.connection_state = "disconnected" # "connected", "connecting", "disconnected"
         self.user_data = None
         self.vpn_name = "ZVPN"
+        self.active_hrasconn = None
         self._polling = True
 
         self.load_local_config()
         self.setup_ui()
 
-        # Handle window close cleanly
+        # Handle window close
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         # Background monitors
         threading.Thread(target=self.initial_status_check, daemon=True).start()
+        threading.Thread(target=self.active_connection_monitor, daemon=True).start()
         threading.Thread(target=self.ping_monitor_loop, daemon=True).start()
 
     def on_close(self):
@@ -115,7 +151,6 @@ class ZvpnClientApp:
         self.url_entry = tk.Entry(entry_frame, textvariable=self.sub_url, font=("Consolas", 10), bg="#071224", fg="#f1f5f9", insertbackground="#38bdf8", relief="flat", highlightthickness=1, highlightbackground="#1e3a8a", highlightcolor="#38bdf8")
         self.url_entry.pack(side="left", fill="x", expand=True, ipady=6, padx=(0, 6))
 
-        # Bind all copy/paste/select-all keys for English & Persian keyboard layouts
         self.bind_entry_shortcuts(self.url_entry)
 
         # Quick Paste Button
@@ -173,11 +208,10 @@ class ZvpnClientApp:
         self.win_settings_btn.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
         # Footer
-        footer = tk.Label(self.root, text="ZVPN Platform v3.0.0 · اتصال هوشمند درون‌برنامه‌ای IKEv2", font=("Segoe UI", 8), fg="#64748b", bg="#0b1320", pady=8)
+        footer = tk.Label(self.root, text="ZVPN Platform v3.0.0 · موتور اتصال مستقیم Win32", font=("Segoe UI", 8), fg="#64748b", bg="#0b1320", pady=8)
         footer.pack(side="bottom")
 
     def bind_entry_shortcuts(self, entry):
-        """Enable Ctrl+V, Ctrl+C, Ctrl+A, Ctrl+X and Right-Click Context Menu on Entry."""
         def _paste(event=None):
             try:
                 text = self.root.clipboard_get()
@@ -214,7 +248,6 @@ class ZvpnClientApp:
             entry.icursor(tk.END)
             return "break"
 
-        # Explicit key combinations
         entry.bind("<Control-v>", _paste)
         entry.bind("<Control-V>", _paste)
         entry.bind("<Control-c>", _copy)
@@ -225,7 +258,6 @@ class ZvpnClientApp:
         entry.bind("<Control-A>", _select_all)
         entry.bind("<Shift-Insert>", _paste)
 
-        # Right-click context menu
         menu = tk.Menu(entry, tearoff=0, bg="#1e293b", fg="#f1f5f9", activebackground="#0284c7", activeforeground="#ffffff")
         menu.add_command(label="جایگذاری (Paste)", command=_paste)
         menu.add_command(label="کپی (Copy)", command=_copy)
@@ -234,10 +266,7 @@ class ZvpnClientApp:
         menu.add_command(label="انتخاب همه (Select All)", command=_select_all)
         menu.add_command(label="پاک کردن (Clear)", command=lambda: entry.delete(0, tk.END))
 
-        def _show_menu(event):
-            menu.tk_popup(event.x_root, event.y_root)
-
-        entry.bind("<Button-3>", _show_menu)
+        entry.bind("<Button-3>", lambda e: menu.tk_popup(e.x_root, e.y_root))
 
     def paste_clipboard_to_entry(self):
         try:
@@ -272,7 +301,6 @@ class ZvpnClientApp:
     def initial_status_check(self):
         if self.sub_url.get().strip():
             self.fetch_subscription(auto_install=False)
-        self.poll_connection_state()
 
     def on_sync_clicked(self):
         url = self.sub_url.get().strip()
@@ -315,12 +343,10 @@ class ZvpnClientApp:
         self.lbl_username.config(text=d.get("username", "—"))
         self.lbl_server.config(text=d.get("serverAddress", "—"))
 
-        # Traffic
         used = self.format_bytes(d.get("usageTotal", 0))
         total = self.format_bytes(d.get("totalLimitBytes")) if not d.get("unlimitedTraffic") else "نامحدود (∞)"
         self.lbl_traffic.config(text=f"{used} / {total}")
 
-        # Remaining
         if d.get("unlimitedTraffic"):
             self.lbl_remain.config(text="نامحدود")
         elif d.get("totalLimitBytes"):
@@ -329,7 +355,6 @@ class ZvpnClientApp:
         else:
             self.lbl_remain.config(text="نامحدود")
 
-        # Expiry
         if d.get("expiresAt"):
             self.lbl_expire.config(text=d.get("expiresAt")[:10])
         elif d.get("durationDays") and d.get("activationStatus") == "not_activated":
@@ -340,7 +365,7 @@ class ZvpnClientApp:
     def configure_silent_pbk(self, vpn_name):
         """Configure rasphone.pbk so Windows NEVER prompts for username/password dialogs."""
         paths = [
-            os.path.expandvars(r"%APPDATA%\Microsoft\Network\Connections\Pbk\rasphone.pbk"),
+            USER_PBK,
             os.path.expandvars(r"%ProgramData%\Microsoft\Network\Connections\Pbk\rasphone.pbk"),
         ]
         for pbk in paths:
@@ -400,7 +425,6 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
         try:
             cmd = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script]
             run_hidden(cmd, capture_output=True, timeout=15)
-            # Remove dialog prompts from phonebook
             self.configure_silent_pbk(vpn_name)
             self.root.after(0, lambda: self.status_text.set("کانکشن با موفقیت و بدون نیاز به ورود رمز پیکربندی شد."))
         except Exception as e:
@@ -424,7 +448,7 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
 
     def connect_vpn(self):
         self.connection_state = "connecting"
-        self.update_connection_ui("connecting", "در حال برقراری اتصال هوشمند...")
+        self.update_connection_ui("connecting", "در حال برقراری اتصال مستقیم با سرور...")
         self.connect_btn.config(state="disabled", text="در حال برقراری اتصال...")
 
         def _do_connect():
@@ -432,21 +456,40 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
             username = self.user_data.get("username", "")
             password = self.user_data.get("password", "")
 
-            # Make sure PBK is silent before dialing
             self.configure_silent_pbk(vpn_name)
 
-            # Dial silently using rasdial with saved credentials
-            res = run_hidden(["rasdial.exe", vpn_name, username, password], capture_output=True, text=True)
-            if res.returncode == 0:
-                self.root.after(0, lambda: self.update_connection_ui("connected", "متصل شد (IKEv2 Secured)"))
-            else:
-                err_msg = (res.stdout or res.stderr or "").strip()
-                print(f"[rasdial error]: {err_msg}")
-                # Try simple dial if credentials already cached
-                res2 = run_hidden(["rasdial.exe", vpn_name], capture_output=True, text=True)
-                if res2.returncode == 0:
+            if rasapi32:
+                params = RASDIALPARAMS()
+                params.dwSize = ctypes.sizeof(RASDIALPARAMS)
+                params.szEntryName = vpn_name
+                params.szUserName = username
+                params.szPassword = password
+                params.szDomain = ""
+                params.szPhoneNumber = ""
+                params.szCallbackNumber = ""
+                params.dwSubEntry = 0
+                params.dwCallbackId = 0
+                params.dwIfIndex = 0
+
+                rasapi32.RasSetEntryDialParamsW(USER_PBK, ctypes.byref(params), False)
+
+                hRasConn = wintypes.HANDLE()
+                res = rasapi32.RasDialW(None, USER_PBK, ctypes.byref(params), 0, None, ctypes.byref(hRasConn))
+
+                if res == 0:
+                    self.active_hrasconn = hRasConn
                     self.root.after(0, lambda: self.update_connection_ui("connected", "متصل شد (IKEv2 Secured)"))
                 else:
+                    err_buf = ctypes.create_unicode_buffer(512)
+                    rasapi32.RasGetErrorStringW(res, err_buf, 512)
+                    err_text = err_buf.value or f"کد خطا {res}"
+                    self.root.after(0, lambda: self.update_connection_ui("disconnected", f"خطا در اتصال: {err_text}"))
+            else:
+                res = run_hidden(["rasdial.exe", vpn_name, username, password], capture_output=True, text=True)
+                if res.returncode == 0:
+                    self.root.after(0, lambda: self.update_connection_ui("connected", "متصل شد (IKEv2 Secured)"))
+                else:
+                    err_msg = (res.stdout or res.stderr or "").strip()
                     self.root.after(0, lambda: self.update_connection_ui("disconnected", f"خطا در اتصال: {err_msg[:45]}"))
 
         threading.Thread(target=_do_connect, daemon=True).start()
@@ -454,23 +497,45 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
     def disconnect_vpn(self):
         self.connect_btn.config(state="disabled", text="در حال قطع...")
         def _do_disconnect():
+            if rasapi32 and self.active_hrasconn:
+                try:
+                    rasapi32.RasHangUpW(self.active_hrasconn)
+                    self.active_hrasconn = None
+                except Exception:
+                    pass
+
+            # Also hangup any active connections with our name via rasdial
             run_hidden(["rasdial.exe", self.vpn_name, "/disconnect"], capture_output=True)
             self.root.after(0, lambda: self.update_connection_ui("disconnected", "اتصال قطع شد."))
+
         threading.Thread(target=_do_disconnect, daemon=True).start()
 
-    def poll_connection_state(self):
+    def active_connection_monitor(self):
+        """Monitor active connections using pure Win32 RasEnumConnections."""
         while self._polling:
             try:
-                res = run_hidden(["rasdial.exe"], capture_output=True, text=True)
-                out = res.stdout
-                is_active = self.vpn_name in out if self.vpn_name else False
+                is_active = False
+                if rasapi32:
+                    ras_conns = (RASCONN * 32)()
+                    ras_conns[0].dwSize = ctypes.sizeof(RASCONN)
+                    cb = wintypes.DWORD(ctypes.sizeof(ras_conns))
+                    c_conns = wintypes.DWORD(0)
+
+                    ret = rasapi32.RasEnumConnectionsW(ctypes.byref(ras_conns), ctypes.byref(cb), ctypes.byref(c_conns))
+                    if ret == 0:
+                        for i in range(c_conns.value):
+                            if ras_conns[i].szEntryName == self.vpn_name:
+                                is_active = True
+                                self.active_hrasconn = ras_conns[i].hrasconn
+                                break
+
                 if is_active and self.connection_state != "connected":
                     self.root.after(0, lambda: self.update_connection_ui("connected", "متصل شد (IKEv2 Secured)"))
                 elif not is_active and self.connection_state == "connected":
                     self.root.after(0, lambda: self.update_connection_ui("disconnected", "قطع اتصال"))
             except Exception:
                 pass
-            time.sleep(3)
+            time.sleep(2)
 
     def ping_monitor_loop(self):
         """Continuously check latency when connected."""
@@ -488,7 +553,7 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
                     self.root.after(0, lambda: self.ping_text.set("—"))
             else:
                 self.root.after(0, lambda: self.ping_text.set("—"))
-            time.sleep(5)
+            time.sleep(4)
 
     def update_connection_ui(self, state, msg):
         self.connection_state = state
@@ -496,14 +561,14 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
         self.connect_btn.config(state="normal")
 
         if state == "connected":
-            self.status_icon.config(text="●", fg="#10b981") # Green
+            self.status_icon.config(text="●", fg="#10b981")
             self.status_title.config(text="وضعیت: متصل به ZVPN", fg="#10b981")
             self.connect_btn.config(text="قطع اتصال (Disconnect)", bg="#ef4444", activebackground="#dc2626")
         elif state == "connecting":
-            self.status_icon.config(text="●", fg="#f59e0b") # Amber
-            self.status_title.config(text="وضعیت: در حال برقراری اتصال...", fg="#f59e0b")
+            self.status_icon.config(text="●", fg="#f59e0b")
+            self.status_title.config(text="وضعیت: در حال اتصال...", fg="#f59e0b")
         else:
-            self.status_icon.config(text="●", fg="#ef4444") # Red
+            self.status_icon.config(text="●", fg="#ef4444")
             self.status_title.config(text="وضعیت: قطع اتصال", fg="#f1f5f9")
             self.connect_btn.config(text="اتصال به ZVPN (Connect)", bg="#10b981", activebackground="#059669")
 
