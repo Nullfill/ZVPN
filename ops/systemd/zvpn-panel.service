@@ -1,0 +1,23 @@
+[Unit]
+Description=ZVPN Web Panel
+After=network-online.target postgresql.service strongswan-starter.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zvpn
+Group=zvpn
+WorkingDirectory=/opt/zvpn-panel/app/backend
+EnvironmentFile=/opt/zvpn-panel/app/backend/.env
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=3
+UMask=0077
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/opt/zvpn-panel/runtime /etc/ipsec.d /etc/ipsec.conf /etc/ipsec.secrets
+RestrictSUIDSGID=false
+
+[Install]
+WantedBy=multi-user.target

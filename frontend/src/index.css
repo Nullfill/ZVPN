@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; --bg: #08111f; --surface: #101d2e; --surface-2: #15263a; --line: rgba(148,163,184,.16); --text: #e6edf7; --muted: #8da0b8; --accent: #65d5c6; --accent-2: #6f9cff; }
+:root[data-theme='light'] { color-scheme: light; --bg: #f4f7fb; --surface: #fff; --surface-2: #edf3f9; --line: #dce5ef; --text: #122033; --muted: #607087; --accent: #087f78; --accent-2: #3567d6; }
+@layer base {
+  * { @apply box-border; }
+  html { background: var(--bg); }
+  body { @apply m-0 min-h-screen min-w-[320px] antialiased; color: var(--text); font-family: 'Vazirmatn', Tahoma, 'Segoe UI', system-ui, sans-serif; background: radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--accent-2) 15%, transparent), transparent 34rem), var(--bg); }
+  button, input, textarea, select { font: inherit; }
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
+}
+@layer components {
+  .glass, .surface { @apply rounded-2xl; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 16px 45px rgba(1,8,20,.12); }
+  .glass { background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(18px); }
+  .sidebar-inner { background: color-mix(in srgb, var(--surface) 93%, transparent); border: 1px solid var(--line); border-radius: 1.15rem; box-shadow: 0 18px 45px rgba(1,8,20,.18); }
+  .sidebar { background: transparent; }
+  .topbar { background: color-mix(in srgb, var(--bg) 88%, transparent); border-bottom: 1px solid var(--line); backdrop-filter: blur(16px); }
+  .brand-mark { @apply flex h-10 w-10 items-center justify-center rounded-xl; color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .nav-item { @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition; color: var(--muted); }
+  .nav-item:hover { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
+  .nav-item.active { color: var(--text); background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: inset -3px 0 var(--accent); }
+  .health-chip, .status-pill { @apply inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs; color: var(--muted); background: color-mix(in srgb, var(--text) 5%, transparent); }
+  .health-chip i, .status-pill i { @apply h-2 w-2 rounded-full bg-emerald-400; box-shadow: 0 0 0 4px color-mix(in srgb, #34d399 16%, transparent); }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50; background: linear-gradient(135deg, var(--accent-2), var(--accent)); }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-ghost, .icon-button { @apply inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 transition; color: var(--muted); border: 1px solid var(--line); background: color-mix(in srgb, var(--text) 4%, transparent); }
+  .btn-ghost:hover, .icon-button:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
+  .input { @apply w-full rounded-xl px-3.5 py-2.5 outline-none; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); }
+  .input::placeholder { color: var(--muted); }
+  .badge { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium; }
+  .badge-ok { @apply badge; color: #34d399; background: rgba(52,211,153,.13); }
+  .badge-warn { @apply badge; color: #fbbf24; background: rgba(251,191,36,.13); }
+  .badge-bad { @apply badge; color: #fb7185; background: rgba(251,113,133,.13); }
+  .badge-muted { @apply badge; color: var(--muted); background: color-mix(in srgb, var(--text) 8%, transparent); }
+  .text-muted { color: var(--muted); }
+  .table-wrap { @apply overflow-x-auto; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface); }
+  .table-wrap th { color: var(--muted); font-size: .75rem; font-weight: 500; text-align: right; white-space: nowrap; }
+  .table-wrap th, .table-wrap td { @apply px-4 py-3; border-bottom: 1px solid var(--line); }
+  .table-wrap tr:last-child td { border-bottom: 0; }
+}
+.skeleton { @apply animate-pulse rounded-xl; background: color-mix(in srgb, var(--text) 9%, transparent); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
