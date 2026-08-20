@@ -188,8 +188,8 @@ case "$ACTION" in
           print "    dpdaction=clear"
           print "    dpddelay=30s"
           print "    dpdtimeout=120s"
-          print "    ike=aes128-sha256-ecp256,aes128-sha256-modp2048,aes256-sha256-modp2048,aes128-sha1-modp1024,aes256-sha1-modp1024"
-          print "    esp=aes128-sha256,aes256-sha256,aes128-sha1,aes256-sha1"
+          print "    ike=aes128gcm128-sha256-ecp256,aes256gcm128-sha256-ecp256,aes128-sha256-ecp256,aes128-sha256-modp2048,aes256-sha256-modp2048,aes128-sha1-modp1024,aes256-sha1-modp1024"
+          print "    esp=aes128gcm128,aes256gcm128,aes128-sha256,aes256-sha256,aes128-sha1,aes256-sha1"
           next
         }
       }

@@ -964,7 +964,7 @@ Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\PolicyAgent'
 Remove-VpnConnection -Name $VpnName -Force -ErrorAction SilentlyContinue
 Remove-VpnConnection -Name "ZVPN Panel - {username}" -Force -ErrorAction SilentlyContinue
 Add-VpnConnection -Name $VpnName -ServerAddress $ServerAddress -TunnelType Ikev2 -EncryptionLevel Maximum -AuthenticationMethod Eap -RememberCredential -Force | Out-Null
-Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTransformConstants SHA256128 -CipherTransformConstants AES128 -EncryptionMethod AES128 -IntegrityCheckMethod SHA256 -PfsGroup None -DHGroup ECP256 -Force | Out-Null
+Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTransformConstants GCMAES128 -CipherTransformConstants GCMAES128 -EncryptionMethod GCMAES128 -IntegrityCheckMethod SHA256 -PfsGroup None -DHGroup ECP256 -Force | Out-Null
 """
         try:
             cmd = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script]
@@ -1008,6 +1008,13 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
                 if res == 0:
                     self.active_hrasconn = hRasConn
                     self.connection_state = "connected"
+                    # Apply immediate MTU, DNS, and Priority Route tuning
+                    opt_ps = f"""
+                    netsh interface ipv4 set subinterface '{vpn_name}' mtu=1360 store=persistent
+                    Set-NetIPInterface -InterfaceAlias '{vpn_name}' -InterfaceMetric 1 -ErrorAction SilentlyContinue
+                    Set-DnsClientServerAddress -InterfaceAlias '{vpn_name}' -ServerAddresses ('1.1.1.1','8.8.8.8') -ErrorAction SilentlyContinue
+                    """
+                    run_hidden(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", opt_ps])
                 else:
                     err_buf = ctypes.create_unicode_buffer(512)
                     rasapi32.RasGetErrorStringW(res, err_buf, 512)
