@@ -534,11 +534,11 @@ HTML_UI = """<!DOCTYPE html>
     padding: 10px 12px;
     height: 130px;
     overflow-y: auto;
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    line-height: 1.5;
-    direction: ltr;
-    text-align: left;
+    font-family: var(--font-sans), var(--font-mono);
+    font-size: 11px;
+    line-height: 1.6;
+    direction: rtl;
+    text-align: right;
     color: #94a3b8;
   }
   .log-line {
@@ -1235,7 +1235,9 @@ secrets {{
                     run_hidden([swanctl_exe, "--load-all", "--file", swanctl_conf], env=env, cwd=bin_dir, capture_output=True)
                     res_init = run_hidden([swanctl_exe, "--initiate", "--child", "zvpn-child", "--timeout", "10"], env=env, cwd=bin_dir, capture_output=True, text=True)
 
-                    if res_init.returncode == 0 or "established successfully" in (res_init.stdout or "").lower():
+                    init_out = (res_init.stdout or "").lower()
+                    init_err = (res_init.stderr or "").lower()
+                    if "established successfully" in init_out and "connection refused" not in init_err:
                         self.last_connect_time = time.time()
                         self.inactive_count = 0
                         self.connection_state = "connected"
@@ -1243,7 +1245,7 @@ secrets {{
                         self.push_state()
                         return
                     else:
-                        self.log(f"هسته مستقل نیازمند دسترسی ادمین کامل است -> سوییچ به موتور پرسرعت بومی ویندوز", "warning")
+                        self.log("سوییچ خودکار به پروتکل امن و پرسرعت بومی ویندوز (IKEv2)...", "warning")
                 except Exception as ex:
                     self.log(f"سوییچ به موتور بومی ویندوز: {ex}", "info")
 
@@ -1339,12 +1341,14 @@ secrets {{
                 core_dir = os.path.join(APP_DATA_DIR, "core")
                 etc_dir = os.path.join(core_dir, "etc")
                 strongswan_conf = os.path.join(etc_dir, "strongswan.conf")
-                swanctl_conf = os.path.join(etc_dir, "swanctl.conf")
                 env = os.environ.copy()
                 env["STRONGSWAN_CONF"] = strongswan_conf
-                r = run_hidden([swanctl_exe, "--list-sas", "--file", swanctl_conf], env=env, cwd=bin_dir, capture_output=True, text=True)
+                r = run_hidden([swanctl_exe, "--list-sas"], env=env, cwd=bin_dir, capture_output=True, text=True)
                 out = (r.stdout or "").upper()
-                if "ESTABLISHED" in out or "INSTALLED" in out or "ZVPN-CORE" in out:
+                err = (r.stderr or "").upper()
+                if "CONNECTION REFUSED" in err:
+                    return False
+                if "ESTABLISHED" in out or "INSTALLED" in out:
                     return True
             except Exception:
                 pass
