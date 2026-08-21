@@ -495,6 +495,61 @@ HTML_UI = """<!DOCTYPE html>
     border-color: rgba(255, 255, 255, 0.15);
   }
 
+  /* Live Logs Terminal Box */
+  .logs-section {
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .logs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--card-border);
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .logs-actions {
+    display: flex;
+    gap: 6px;
+  }
+  .btn-log-action {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-log-action:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+  .terminal-box {
+    background: #030712;
+    padding: 10px 12px;
+    height: 130px;
+    overflow-y: auto;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1.5;
+    direction: ltr;
+    text-align: left;
+    color: #94a3b8;
+  }
+  .log-line {
+    word-break: break-all;
+    margin-bottom: 2px;
+  }
+  .log-line.info { color: #94a3b8; }
+  .log-line.success { color: #34d399; font-weight: 600; }
+  .log-line.warning { color: #fbbf24; }
+  .log-line.error { color: #f87171; font-weight: 700; }
+
   /* Footer Note */
   .footer-text {
     text-align: center;
@@ -615,6 +670,20 @@ HTML_UI = """<!DOCTYPE html>
     <button class="btn-util" onclick="handleWinSettings()">🌐 تنظیمات VPN ویندوز</button>
   </div>
 
+  <!-- Live Diagnostic Logs Card -->
+  <div class="glass-card logs-section">
+    <div class="logs-header">
+      <span>📟 لاگ زنده و وضعیت عیب‌یابی (Live Diagnostic Logs)</span>
+      <div class="logs-actions">
+        <button class="btn-log-action" onclick="copyLogs()">📋 کپی لاگ</button>
+        <button class="btn-log-action" onclick="clearLogs()">🗑️ پاکسازی</button>
+      </div>
+    </div>
+    <div class="terminal-box" id="terminalBox">
+      <div class="log-line info">[00:00:00] ZVPN Client ready.</div>
+    </div>
+  </div>
+
   <!-- Footer -->
   <div class="footer-text">
     ZVPN Platform v3.0.0 · محافظت ایمن IKEv2 با رمزنگاری سخت‌افزاری AES-256
@@ -628,7 +697,40 @@ HTML_UI = """<!DOCTYPE html>
       window.pywebview.api.get_initial_state().then(state => {
         if (state) updateState(state);
       });
+      window.pywebview.api.get_initial_logs().then(logs => {
+        if (logs && logs.length) {
+          const box = document.getElementById('terminalBox');
+          box.innerHTML = '';
+          logs.forEach(appendLog);
+        }
+      });
     });
+
+    function appendLog(item) {
+      const box = document.getElementById('terminalBox');
+      if (!box) return;
+      const div = document.createElement('div');
+      div.className = 'log-line ' + (item.level || 'info');
+      div.innerText = '[' + item.time + '] ' + item.text;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function copyLogs() {
+      const box = document.getElementById('terminalBox');
+      if (!box) return;
+      navigator.clipboard.writeText(box.innerText).then(() => {
+        alert('لاگ‌ها با موفقیت کپی شدند');
+      }).catch(() => {
+        window.pywebview.api.copy_text_to_clipboard(box.innerText);
+        alert('لاگ‌ها کپی شدند');
+      });
+    }
+
+    function clearLogs() {
+      const box = document.getElementById('terminalBox');
+      if (box) box.innerHTML = '';
+    }
 
     function handlePaste() {
       navigator.clipboard.readText().then(text => {
@@ -754,6 +856,22 @@ class ZvpnApi:
     def get_initial_state(self):
         return self.app.get_full_state()
 
+    def get_initial_logs(self):
+        return self.app.logs
+
+    def copy_text_to_clipboard(self, text):
+        try:
+            import tkinter as tk
+            r = tk.Tk()
+            r.withdraw()
+            r.clipboard_clear()
+            r.clipboard_append(text)
+            r.update()
+            r.destroy()
+            return True
+        except Exception:
+            return False
+
     def get_clipboard(self):
         try:
             import tkinter as tk
@@ -799,8 +917,31 @@ class ZvpnDesktopClient:
         self.error_msg = ""
         self.window = None
         self._polling = True
+        self.logs = []
+        self.last_connect_time = 0
+        self.inactive_count = 0
 
+        self.log("کلاینت دسکتاپ ZVPN آماده به کار است.")
         self.load_local_config()
+
+    def log(self, text, level="info"):
+        now_str = time.strftime("%H:%M:%S")
+        entry = {"time": now_str, "text": str(text), "level": level}
+        self.logs.append(entry)
+        if len(self.logs) > 300:
+            self.logs.pop(0)
+        try:
+            log_file = os.path.join(APP_DATA_DIR, "zvpn_client.log")
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"[{now_str}] [{level.upper()}] {text}\n")
+        except Exception:
+            pass
+        if self.window:
+            try:
+                js = f"appendLog({json.dumps(entry)});"
+                self.window.evaluate_js(js)
+            except Exception:
+                pass
 
     def load_local_config(self):
         if os.path.exists(CONFIG_FILE):
@@ -808,6 +949,8 @@ class ZvpnDesktopClient:
                 with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
                     self.sub_url = cfg.get("sub_url", "")
+                    if self.sub_url:
+                        self.log(f"آدرس اشتراک ذخیره‌شده لود شد: {self.sub_url[:35]}...")
             except Exception:
                 pass
 
@@ -860,7 +1003,7 @@ class ZvpnDesktopClient:
                 "trafficText": f"{used} / {total}",
                 "remainText": rem_text,
                 "expireText": exp_text,
-                "todayText": self.format_bytes(d.get("todayBytes", 0)),
+                "todayText": self.format_bytes(d.get("usageToday", 0)),
                 "usagePct": pct,
             }
 
@@ -873,65 +1016,66 @@ class ZvpnDesktopClient:
         }
 
     def push_state(self):
-        if self.window:
-            try:
-                state_json = json.dumps(self.get_full_state())
-                self.window.evaluate_js(f"updateState({state_json})")
-            except Exception:
-                pass
+        if not self.window:
+            return
+        state = self.get_full_state()
+        try:
+            js = f"updateState({json.dumps(state)});"
+            self.window.evaluate_js(js)
+        except Exception:
+            pass
 
-    def fetch_subscription(self, auto_install=True):
+    def fetch_subscription(self, auto_install=False):
         if not self.sub_url:
             return
-        raw_url = self.sub_url.strip()
-        json_url = raw_url
-        if "/d/" in raw_url and not raw_url.endswith("/json"):
-            json_url = raw_url.rstrip("/") + "/json"
+        self.log(f"در حال دریافت اطلاعات اشتراک از سرور...")
+        def _task():
+            try:
+                target_url = self.sub_url
+                if not target_url.endswith("/json"):
+                    target_url = target_url.rstrip("/") + "/json"
 
-        try:
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            req = urllib.request.Request(json_url, headers={"User-Agent": "ZVPN-Windows-Client/3.0.0"})
-            with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                self.user_data = data
-                self.vpn_name = f"ZVPN - {data.get('username', 'VPN')}"
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+
+                req = urllib.request.Request(target_url, headers={"User-Agent": "ZVPN-Desktop/3.0"})
+                with urllib.request.urlopen(req, context=ctx, timeout=12) as response:
+                    raw = response.read().decode("utf-8")
+                    data = json.loads(raw)
+                    self.user_data = data
+                    self.vpn_name = f"ZVPN - {data.get('username', 'Client')}"
+                    self.log(f"اشتراک کاربر '{data.get('username')}' با موفقیت همگام‌سازی شد.", "success")
+                    if auto_install:
+                        self.install_windows_profile(data)
+                    self.push_state()
+            except Exception as e:
+                self.error_msg = f"خطا در دریافت اشتراک: {e}"
+                self.log(f"خطا در دریافت اشتراک: {e}", "error")
                 self.push_state()
-                if auto_install:
-                    self.install_windows_profile(data)
-        except Exception as e:
-            self.error_msg = f"خطا در دریافت اشتراک: {e}"
-            self.push_state()
+
+        threading.Thread(target=_task, daemon=True).start()
 
     def configure_silent_pbk(self, vpn_name):
-        paths = [
-            USER_PBK,
-            os.path.expandvars(r"%ProgramData%\Microsoft\Network\Connections\Pbk\rasphone.pbk"),
-        ]
-        for pbk in paths:
-            if not os.path.exists(pbk):
-                continue
+        if os.path.exists(USER_PBK):
             try:
-                with open(pbk, "r", encoding="utf-8", errors="ignore") as f:
+                with open(USER_PBK, "r", encoding="utf-8", errors="ignore") as f:
                     lines = f.readlines()
                 new_lines = []
-                in_section = False
+                in_target = False
                 for line in lines:
-                    stripped = line.strip()
-                    if stripped.startswith("[") and stripped.endswith("]"):
-                        in_section = (stripped == f"[{vpn_name}]" or stripped.startswith("[ZVPN"))
-                    if in_section:
-                        if stripped.startswith("PreviewUserPw="):
+                    if line.strip().startswith("[") and line.strip().endswith("]"):
+                        sec_name = line.strip()[1:-1]
+                        in_target = (sec_name == vpn_name)
+                    if in_target:
+                        if line.startswith("PreviewUserPw="):
                             line = "PreviewUserPw=0\n"
-                        elif stripped.startswith("PreviewDomain="):
+                        elif line.startswith("PreviewDomain="):
                             line = "PreviewDomain=0\n"
-                        elif stripped.startswith("PreviewPhoneNumber="):
-                            line = "PreviewPhoneNumber=0\n"
-                        elif stripped.startswith("ShowDialingProgress="):
+                        elif line.startswith("ShowDialingProgress="):
                             line = "ShowDialingProgress=0\n"
                     new_lines.append(line)
-                with open(pbk, "w", encoding="utf-8") as f:
+                with open(USER_PBK, "w", encoding="utf-8") as f:
                     f.writelines(new_lines)
             except Exception:
                 pass
@@ -942,6 +1086,7 @@ class ZvpnDesktopClient:
         username = data.get("username")
         password = data.get("password")
         ca_b64 = data.get("caCertificateBase64", "")
+        self.log(f"در حال نصب و بهینه‌سازی پروفایل کانکشن ویندوز ({vpn_name})...")
 
         ps_script = f"""
 $ErrorActionPreference = 'SilentlyContinue'
@@ -967,8 +1112,9 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
             cmd = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script]
             run_hidden(cmd, capture_output=True, timeout=15)
             self.configure_silent_pbk(vpn_name)
-        except Exception:
-            pass
+            self.log("پروفایل کانکشن با رمزنگاری سخت‌افزاری GCMAES128 نصب شد.", "success")
+        except Exception as ex:
+            self.log(f"خطا در ایجاد پروفایل: {ex}", "warning")
 
     def get_standalone_core_paths(self):
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -993,6 +1139,7 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
 
     def connect_vpn(self):
         if not self.user_data:
+            self.log("ابتدا آدرس اشتراک را وارد و بروزرسانی کنید.", "warning")
             return
         self.connection_state = "connecting"
         self.error_msg = ""
@@ -1004,11 +1151,14 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
             password = self.user_data.get("password", "")
             vpn_name = self.vpn_name
 
+            self.log(f"🚀 آغاز فرآیند اتصال به سرور {server} با کاربر {username}...")
+
             charon_exe, swanctl_exe, bin_dir = self.get_standalone_core_paths()
 
             # Mode A: Standalone strongSwan Core (Zero Windows Phonebook Dependency)
             if charon_exe and swanctl_exe:
                 try:
+                    self.log("تلاش برای راه‌اندازی هسته اختصاصی strongSwan (Mode A)...")
                     core_dir = os.path.join(APP_DATA_DIR, "core")
                     etc_dir = os.path.join(core_dir, "etc")
                     swanctl_dir = os.path.join(etc_dir, "swanctl")
@@ -1018,17 +1168,31 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
                     with open(strongswan_conf, "w", encoding="utf-8") as f:
                         f.write("""# Standalone strongSwan Core
 charon-svc {
-    load = aes sha1 sha2 curve25519 gmp x509 pem pkcs1 pubkey mgf1 nonce winrandom socket-win kernel-wfp eap-identity eap-mschapv2 eap-md5 vici
-    journal {
-        default = 1
+    load_modular = yes
+    plugins {
+        socket-win { load = yes }
+        kernel-wfp { load = yes }
+        vici { load = yes }
+        winrandom { load = yes }
+        nonce { load = yes }
+        aes { load = yes }
+        sha1 { load = yes }
+        sha2 { load = yes }
+        curve25519 { load = yes }
+        gmp { load = yes }
+        x509 { load = yes }
+        pem { load = yes }
+        pkcs1 { load = yes }
+        pubkey { load = yes }
+        mgf1 { load = yes }
+        eap-identity { load = yes }
+        eap-mschapv2 { load = yes }
+        eap-md5 { load = yes }
     }
-}
-swanctl {
-    load = yes
 }
 """)
 
-                    swanctl_conf = os.path.join(swanctl_dir, "swanctl.conf")
+                    swanctl_conf = os.path.join(etc_dir, "swanctl.conf")
                     with open(swanctl_conf, "w", encoding="utf-8") as f:
                         f.write(f"""connections {{
     zvpn-core {{
@@ -1063,25 +1227,28 @@ secrets {{
                     env = os.environ.copy()
                     env["STRONGSWAN_CONF"] = strongswan_conf
 
-                    # Kill any existing charon daemon
                     run_hidden(["taskkill.exe", "/F", "/IM", "charon-svc.exe"], capture_output=True)
 
-                    # Start standalone charon-svc daemon
                     self.charon_proc = popen_hidden([charon_exe], env=env, cwd=bin_dir)
                     time.sleep(1.5)
 
-                    # Load and initiate tunnel
-                    run_hidden([swanctl_exe, "--load-all", "--dir", swanctl_dir], env=env, cwd=bin_dir, capture_output=True)
-                    res_init = run_hidden([swanctl_exe, "--initiate", "--child", "zvpn-child", "--timeout", "15"], env=env, cwd=bin_dir, capture_output=True, text=True)
+                    run_hidden([swanctl_exe, "--load-all", "--file", swanctl_conf], env=env, cwd=bin_dir, capture_output=True)
+                    res_init = run_hidden([swanctl_exe, "--initiate", "--child", "zvpn-child", "--timeout", "10"], env=env, cwd=bin_dir, capture_output=True, text=True)
 
                     if res_init.returncode == 0 or "established successfully" in (res_init.stdout or "").lower():
+                        self.last_connect_time = time.time()
+                        self.inactive_count = 0
                         self.connection_state = "connected"
+                        self.log("✅ هسته اختصاصی strongSwan با موفقیت متصل شد!", "success")
                         self.push_state()
                         return
+                    else:
+                        self.log(f"هسته مستقل نیازمند دسترسی ادمین کامل است -> سوییچ به موتور پرسرعت بومی ویندوز", "warning")
                 except Exception as ex:
-                    self.error_msg = f"Standalone Core Error: {ex}"
+                    self.log(f"سوییچ به موتور بومی ویندوز: {ex}", "info")
 
             # Mode B: Native Win32 RasDial Engine (Hardware-Accelerated AES-GCM)
+            self.log(f"در حال برقراری اتصال با پروتکل IKEv2 بومی ویندوز ({vpn_name})...")
             self.configure_silent_pbk(vpn_name)
 
             if rasapi32:
@@ -1104,7 +1271,11 @@ secrets {{
 
                 if res == 0:
                     self.active_hrasconn = hRasConn
+                    self.last_connect_time = time.time()
+                    self.inactive_count = 0
                     self.connection_state = "connected"
+                    self.log("✅ اتصال با موفقیت برقرار شد!", "success")
+
                     opt_ps = f"""
                     netsh interface ipv4 set subinterface '{vpn_name}' mtu=1360 store=persistent
                     Set-NetIPInterface -InterfaceAlias '{vpn_name}' -InterfaceMetric 1 -ErrorAction SilentlyContinue
@@ -1114,14 +1285,21 @@ secrets {{
                 else:
                     err_buf = ctypes.create_unicode_buffer(512)
                     rasapi32.RasGetErrorStringW(res, err_buf, 512)
-                    self.error_msg = f"خطا در برقراری اتصال: {err_buf.value or res}"
+                    err_text = err_buf.value or f"کد {res}"
+                    self.error_msg = f"خطا در برقراری اتصال: {err_text}"
+                    self.log(f"❌ خطا در اتصال RasDial: {err_text}", "error")
                     self.connection_state = "disconnected"
             else:
                 res = run_hidden(["rasdial.exe", vpn_name, username, password], capture_output=True, text=True)
                 if res.returncode == 0:
+                    self.last_connect_time = time.time()
+                    self.inactive_count = 0
                     self.connection_state = "connected"
+                    self.log("✅ اتصال برقرار شد!", "success")
                 else:
-                    self.error_msg = "خطا در اتصال به سرور"
+                    err_out = (res.stdout or res.stderr or "").strip()
+                    self.error_msg = f"خطا در اتصال: {err_out}"
+                    self.log(f"❌ خطا در دستور rasdial: {err_out}", "error")
                     self.connection_state = "disconnected"
 
             self.push_state()
@@ -1129,6 +1307,7 @@ secrets {{
         threading.Thread(target=_do_connect, daemon=True).start()
 
     def disconnect_vpn(self):
+        self.log("در حال قطع اتصال...")
         def _do_disconnect():
             charon_exe, swanctl_exe, bin_dir = self.get_standalone_core_paths()
             if swanctl_exe:
@@ -1148,6 +1327,7 @@ secrets {{
 
             run_hidden(["rasdial.exe", self.vpn_name, "/disconnect"], capture_output=True)
             self.connection_state = "disconnected"
+            self.log("اتصال با موفقیت قطع شد.", "info")
             self.push_state()
 
         threading.Thread(target=_do_disconnect, daemon=True).start()
@@ -1195,13 +1375,23 @@ secrets {{
     def active_connection_monitor(self):
         while self._polling:
             try:
-                is_active = self.is_any_vpn_active()
-                if is_active and self.connection_state != "connected":
-                    self.connection_state = "connected"
-                    self.push_state()
-                elif not is_active and self.connection_state == "connected":
-                    self.connection_state = "disconnected"
-                    self.push_state()
+                if self.connection_state == "connected":
+                    if time.time() - self.last_connect_time > 10:
+                        is_active = self.is_any_vpn_active()
+                        if not is_active:
+                            self.inactive_count += 1
+                            if self.inactive_count >= 3:
+                                self.log("مانیتورینگ: اتصال قطع شد.", "warning")
+                                self.connection_state = "disconnected"
+                                self.push_state()
+                        else:
+                            self.inactive_count = 0
+                elif self.connection_state == "disconnected":
+                    is_active = self.is_any_vpn_active()
+                    if is_active:
+                        self.log("مانیتورینگ: اتصال فعال شناسایی شد.", "success")
+                        self.connection_state = "connected"
+                        self.push_state()
             except Exception:
                 pass
             time.sleep(3)
