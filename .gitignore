@@ -46,3 +46,13 @@ Thumbs.db
 backup/
 *.tar.gz
 *.zip
+
+# Windows Client Source & Core (Protected/Excluded)
+clients/windows/zvpn_client.py
+clients/windows/bin/
+clients/windows/build/
+clients/windows/dist/
+clients/windows/*.spec
+clients/windows/ZVPN-Windows-Client.exe
+backend/public/
+

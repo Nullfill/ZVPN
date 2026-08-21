@@ -374,24 +374,21 @@ a.btn.alt{background:rgba(255,255,255,.1)}a.btn span{font-size:.78rem;opacity:.8
   </div>
 
   <div class="card section">
-    <h2>دانلود کانکشن و نرم‌افزار</h2>
+    <h2>دانلود نرم‌افزار و کانکشن</h2>
     <div class="btns">
-      <a class="btn" style="background:linear-gradient(135deg,#0284c7,#2563eb)" href="/download/windows-client.exe"><span>نرم‌افزار اختصاصی ZVPN (ویندوز ۱۰ و ۱۱)</span><strong>.exe</strong></a>
-      <a class="btn" href="${htmlEsc(links.android)}"><span>Android — strongSwan</span><strong>.sswan</strong></a>
-      <a class="btn" href="${htmlEsc(links.ios)}"><span>iPhone / iPad</span><strong>.mobileconfig</strong></a>
-      <a class="btn alt" href="${htmlEsc(links.windowsLauncher)}"><span>Windows — اسکریپت خودکار</span><strong>.cmd</strong></a>
-      <a class="btn alt" href="${htmlEsc(links.windows)}"><span>Windows — اسکریپت PowerShell</span><strong>.ps1</strong></a>
+      <a class="btn" style="background:linear-gradient(135deg,#0284c7,#2563eb);grid-column:1/-1;" href="/download/windows-client.exe"><span>💻 نرم‌افزار اختصاصی ویندوز (ویندوز ۱۰ و ۱۱)</span><strong>.exe</strong></a>
+      <a class="btn" href="${htmlEsc(links.android)}"><span>📱 Android — strongSwan</span><strong>.sswan</strong></a>
+      <a class="btn" href="${htmlEsc(links.ios)}"><span>🍏 iPhone / iPad</span><strong>.mobileconfig</strong></a>
     </div>
   </div>
 
   <div class="card section">
-    <h2>راهنمای نصب</h2>
+    <h2>راهنمای اتصال</h2>
     <div class="guides">
-      <div class="guide"><b>Windows (نرم‌افزار اختصاصی)</b><p>۱) فایل ZVPN-Windows-Client.exe را دانلود و اجرا کنید. ۲) لینک همین صفحه را در کادر قرار دهید و دکمه «بروزرسانی» را بزنید. ۳) روی «اتصال به ZVPN» کلیک کنید.</p></div>
-      <div class="guide"><b>Android</b><p>۱) strongSwan VPN Client را نصب کنید. ۲) فایل .sswan را باز کنید. ۳) Import و Connect — نام کاربری و رمز همان حساب VPN شماست.</p></div>
-      <div class="guide"><b>iPhone / iPad</b><p>۱) فایل .mobileconfig را دانلود کنید. ۲) Settings → General → VPN &amp; Device Management → Install. ۳) Settings → VPN → Connect.</p></div>
-      <div class="guide"><b>Windows (بدون نرم‌افزار)</b><p>۱) فایل .cmd را Run as Administrator اجرا کنید. ۲) پنجره VPN باز می‌شود؛ روی Connect کلیک کنید.</p></div>
-      <div class="guide"><b>نکته</b><p>اگر آدرس سرور عوض شد، پروفایل را دوباره از همین صفحه دانلود کنید. لینک را در اختیار دیگران قرار ندهید.</p></div>
+      <div class="guide"><b>💻 ویندوز (ZVPN Client)</b><p>۱) نرم‌افزار اختصاصی را از دکمه بالا دانلود و باز کنید.<br>۲) لینک همین صفحه را در برنامه کپی کرده و روی دکمه بروزرسانی (🔄) بزنید.<br>۳) دکمه «اتصال به ZVPN» را بزنید تا ارتباط پرسرعت با پروتکل IKEv2 فعال شود.</p></div>
+      <div class="guide"><b>📱 اندروید</b><p>۱) نرم‌افزار strongSwan را نصب کنید.<br>۲) فایل .sswan را دانلود و باز کنید.<br>۳) با نام کاربری و رمز عبور خود متصل شوید.</p></div>
+      <div class="guide"><b>🍏 آیفون و آیپد</b><p>۱) فایل .mobileconfig را دانلود و نصب کنید.<br>۲) در تنظیمات گوشی بخش VPN آن را فعال و متصل کنید.</p></div>
+      <div class="guide"><b>⚠️ نکته مهم</b><p>این لینک اختصاصی شماست. از ارسال آن به افراد دیگر خودداری کنید.</p></div>
     </div>
   </div>
 
