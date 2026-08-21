@@ -341,13 +341,13 @@ app.get('/d/:token/ios', asyncHandler(async (req, res) => { const u = await toke
 app.get('/d/:token/windows', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Disposition': `attachment; filename="${u.username}-windows-setup.ps1"` }); res.send(await windowsProfile(u)); }));
 app.get('/d/:token/windows-launcher', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Disposition': `attachment; filename="${u.username}-windows-install.cmd"` }); res.send(windowsLauncher(req.params.token)); }));
 
-app.get(['/download/windows-client.exe', '/download/ZVPN-Windows-Client.exe'], (req, res) => {
+app.get(['/d/:token/windows-client.exe', '/d/:token/windows-client', '/download/windows-client.exe', '/download/ZVPN-Windows-Client.exe'], (req, res) => {
   const possiblePaths = [
+    '/opt/zvpn-panel/backend/public/ZVPN-Windows-Client.exe',
+    '/opt/zvpn-panel/app/backend/public/ZVPN-Windows-Client.exe',
     path.resolve('backend/public/ZVPN-Windows-Client.exe'),
     path.resolve('clients/windows/dist/ZVPN-Windows-Client.exe'),
     path.resolve('clients/windows/ZVPN-Windows-Client.exe'),
-    '/opt/zvpn-panel/backend/public/ZVPN-Windows-Client.exe',
-    '/opt/zvpn-panel/clients/windows/dist/ZVPN-Windows-Client.exe',
     path.resolve('public/ZVPN-Windows-Client.exe'),
   ];
   for (const p of possiblePaths) {

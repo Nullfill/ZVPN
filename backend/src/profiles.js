@@ -376,7 +376,7 @@ a.btn.alt{background:rgba(255,255,255,.1)}a.btn span{font-size:.78rem;opacity:.8
   <div class="card section">
     <h2>دانلود نرم‌افزار و کانکشن</h2>
     <div class="btns">
-      <a class="btn" style="background:linear-gradient(135deg,#0284c7,#2563eb);grid-column:1/-1;" href="/download/windows-client.exe"><span>💻 نرم‌افزار اختصاصی ویندوز (ویندوز ۱۰ و ۱۱)</span><strong>.exe</strong></a>
+      <a class="btn" style="background:linear-gradient(135deg,#0284c7,#2563eb);grid-column:1/-1;" href="${htmlEsc(links.landing)}/windows-client.exe"><span>💻 نرم‌افزار اختصاصی ویندوز (ویندوز ۱۰ و ۱۱)</span><strong>.exe</strong></a>
       <a class="btn" href="${htmlEsc(links.android)}"><span>📱 Android — strongSwan</span><strong>.sswan</strong></a>
       <a class="btn" href="${htmlEsc(links.ios)}"><span>🍏 iPhone / iPad</span><strong>.mobileconfig</strong></a>
     </div>
