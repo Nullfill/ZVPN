@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import os from 'node:os';
 import path from 'node:path';
+import fs from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { z } from 'zod';
@@ -345,6 +346,18 @@ app.get('/download/windows-client.exe', (req, res) => {
   res.download(exePath, 'ZVPN-Windows-Client.exe', (err) => {
     if (err && !res.headersSent) res.status(404).send('Windows Client binary not packaged on server');
   });
+});
+
+app.get('/download/strongswan-win64.tar.gz', (req, res) => {
+  const possiblePaths = [
+    '/opt/zvpn-panel/backend/public/strongswan-win64.tar.gz',
+    '/tmp/strongswan-win64.tar.gz',
+    path.resolve('public/strongswan-win64.tar.gz'),
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return res.download(p, 'strongswan-win64.tar.gz');
+  }
+  res.status(404).send('Not Found');
 });
 
 app.use(notFoundHandler);

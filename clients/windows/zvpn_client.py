@@ -973,6 +973,27 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
         except Exception:
             pass
 
+    def get_standalone_core_paths(self):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        if getattr(sys, 'frozen', False):
+            base_dir = sys._MEIPASS
+        
+        candidates = [
+            os.path.join(base_dir, "bin"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin"),
+            r"d:\python\zvpn-panel-v1.1\zvpn-panel-v1.2.3\clients\windows\bin",
+        ]
+        for b in candidates:
+            charon = os.path.join(b, "bin", "charon-svc.exe")
+            if not os.path.exists(charon):
+                charon = os.path.join(b, "charon-svc.exe")
+            swanctl = os.path.join(b, "sbin", "swanctl.exe")
+            if not os.path.exists(swanctl):
+                swanctl = os.path.join(b, "swanctl.exe")
+            if os.path.exists(charon) and os.path.exists(swanctl):
+                return charon, swanctl, b
+        return None, None, None
+
     def connect_vpn(self):
         if not self.user_data:
             return
@@ -981,10 +1002,89 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
         self.push_state()
 
         def _do_connect():
-            vpn_name = self.vpn_name
+            server = self.user_data.get("serverAddress", "")
             username = self.user_data.get("username", "")
             password = self.user_data.get("password", "")
+            vpn_name = self.vpn_name
 
+            charon_exe, swanctl_exe, bin_dir = self.get_standalone_core_paths()
+
+            # Mode A: Standalone strongSwan Core (Zero Windows Phonebook Dependency)
+            if charon_exe and swanctl_exe:
+                try:
+                    core_dir = os.path.join(APP_DATA_DIR, "core")
+                    etc_dir = os.path.join(core_dir, "etc")
+                    swanctl_dir = os.path.join(etc_dir, "swanctl")
+                    os.makedirs(swanctl_dir, exist_ok=True)
+
+                    strongswan_conf = os.path.join(etc_dir, "strongswan.conf")
+                    with open(strongswan_conf, "w", encoding="utf-8") as f:
+                        f.write("""# Standalone strongSwan Core
+charon-svc {
+    load = aes sha1 sha2 curve25519 gmp x509 pem pkcs1 pubkey mgf1 nonce winrandom socket-win kernel-wfp eap-identity eap-mschapv2 eap-md5 vici
+    journal {
+        default = 1
+    }
+}
+swanctl {
+    load = yes
+}
+""")
+
+                    swanctl_conf = os.path.join(swanctl_dir, "swanctl.conf")
+                    with open(swanctl_conf, "w", encoding="utf-8") as f:
+                        f.write(f"""connections {{
+    zvpn-core {{
+        vips = 0.0.0.0
+        remote_addrs = {server}
+        send_cert = never
+        local {{
+            auth = eap-mschapv2
+            eap_id = {username}
+        }}
+        remote {{
+            auth = pubkey
+            id = {server}
+        }}
+        children {{
+            zvpn-child {{
+                remote_ts = 0.0.0.0/0
+                esp_proposals = aes128gcm128,aes256gcm128,aes128-sha256
+            }}
+        }}
+    }}
+}}
+
+secrets {{
+    eap-user {{
+        id = {username}
+        secret = "{password}"
+    }}
+}}
+""")
+
+                    env = os.environ.copy()
+                    env["STRONGSWAN_CONF"] = strongswan_conf
+
+                    # Kill any existing charon daemon
+                    run_hidden(["taskkill.exe", "/F", "/IM", "charon-svc.exe"], capture_output=True)
+
+                    # Start standalone charon-svc daemon
+                    self.charon_proc = popen_hidden([charon_exe], env=env, cwd=bin_dir)
+                    time.sleep(1.5)
+
+                    # Load and initiate tunnel
+                    run_hidden([swanctl_exe, "--load-all", "--dir", swanctl_dir], env=env, cwd=bin_dir, capture_output=True)
+                    res_init = run_hidden([swanctl_exe, "--initiate", "--child", "zvpn-child", "--timeout", "15"], env=env, cwd=bin_dir, capture_output=True, text=True)
+
+                    if res_init.returncode == 0 or "established successfully" in (res_init.stdout or "").lower():
+                        self.connection_state = "connected"
+                        self.push_state()
+                        return
+                except Exception as ex:
+                    self.error_msg = f"Standalone Core Error: {ex}"
+
+            # Mode B: Native Win32 RasDial Engine (Hardware-Accelerated AES-GCM)
             self.configure_silent_pbk(vpn_name)
 
             if rasapi32:
@@ -1008,7 +1108,6 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
                 if res == 0:
                     self.active_hrasconn = hRasConn
                     self.connection_state = "connected"
-                    # Apply immediate MTU, DNS, and Priority Route tuning
                     opt_ps = f"""
                     netsh interface ipv4 set subinterface '{vpn_name}' mtu=1360 store=persistent
                     Set-NetIPInterface -InterfaceAlias '{vpn_name}' -InterfaceMetric 1 -ErrorAction SilentlyContinue
@@ -1034,6 +1133,15 @@ Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTran
 
     def disconnect_vpn(self):
         def _do_disconnect():
+            charon_exe, swanctl_exe, bin_dir = self.get_standalone_core_paths()
+            if swanctl_exe:
+                try:
+                    run_hidden([swanctl_exe, "--terminate", "--child", "zvpn-child"], cwd=bin_dir, capture_output=True)
+                except Exception:
+                    pass
+
+            run_hidden(["taskkill.exe", "/F", "/IM", "charon-svc.exe"], capture_output=True)
+
             if rasapi32 and self.active_hrasconn:
                 try:
                     rasapi32.RasHangUpW(self.active_hrasconn)
