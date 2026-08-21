@@ -68,9 +68,6 @@ HTML_UI = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ZVPN Desktop Client</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg-main: #060913;
@@ -88,8 +85,8 @@ HTML_UI = """<!DOCTYPE html>
     --text-primary: #f8fafc;
     --text-secondary: #94a3b8;
     --text-muted: #64748b;
-    --font-sans: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    --font-mono: 'JetBrains Mono', monospace;
+    --font-sans: 'Segoe UI', 'Segoe UI Variable', 'Segoe UI Semibold', 'Tahoma', 'Vazirmatn', -apple-system, sans-serif;
+    --font-mono: 'Consolas', 'Cascadia Code', 'Segoe UI Mono', monospace;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
@@ -1155,27 +1152,50 @@ secrets {{
 
         threading.Thread(target=_do_disconnect, daemon=True).start()
 
+    def is_standalone_core_active(self):
+        charon_exe, swanctl_exe, bin_dir = self.get_standalone_core_paths()
+        if swanctl_exe:
+            try:
+                core_dir = os.path.join(APP_DATA_DIR, "core")
+                etc_dir = os.path.join(core_dir, "etc")
+                strongswan_conf = os.path.join(etc_dir, "strongswan.conf")
+                swanctl_conf = os.path.join(etc_dir, "swanctl.conf")
+                env = os.environ.copy()
+                env["STRONGSWAN_CONF"] = strongswan_conf
+                r = run_hidden([swanctl_exe, "--list-sas", "--file", swanctl_conf], env=env, cwd=bin_dir, capture_output=True, text=True)
+                out = (r.stdout or "").upper()
+                if "ESTABLISHED" in out or "INSTALLED" in out or "ZVPN-CORE" in out:
+                    return True
+            except Exception:
+                pass
+        return False
+
     def is_vpn_active_in_windows(self):
         try:
             r = run_hidden(["rasdial.exe"], capture_output=True, text=True)
-            out = r.stdout or ""
-            if "No connections" in out:
+            out = (r.stdout or "").strip()
+            if not out or "No connections" in out:
                 return False
-            uname = self.user_data.get("username", "") if self.user_data else ""
-            if uname and uname in out:
+            # Check if our VPN name or username is in output
+            if "ZVPN" in out:
                 return True
             if self.vpn_name and self.vpn_name in out:
                 return True
-            if "ZVPN" in out:
+            if self.user_data and self.user_data.get("username") and self.user_data.get("username") in out:
+                return True
+            if len(out.splitlines()) >= 2:
                 return True
         except Exception:
             pass
         return False
 
+    def is_any_vpn_active(self):
+        return self.is_standalone_core_active() or self.is_vpn_active_in_windows()
+
     def active_connection_monitor(self):
         while self._polling:
             try:
-                is_active = self.is_vpn_active_in_windows()
+                is_active = self.is_any_vpn_active()
                 if is_active and self.connection_state != "connected":
                     self.connection_state = "connected"
                     self.push_state()
