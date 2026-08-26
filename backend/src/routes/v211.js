@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { config } from '../config.js';
 import { exportPanelBackup, importPanelBackup } from '../services/backup.js';
+import { testTelegramConnection, sendTelegramBackup } from '../services/telegramBackup.js';
 import { getVpnProfileConfig } from '../services/vpnConfig.js';
 import { listEvents, getEventStats } from '../services/observability.js';
 import {
@@ -129,6 +130,32 @@ export function mountV211Routes(app, ctx) {
       if (e.message === 'INVALID_BACKUP_FORMAT') return apiError(res, 400, 'INVALID_INPUT');
       console.error('[backup.import]', e);
       apiError(res, 500, 'INTERNAL_ERROR');
+    }
+  }));
+
+  app.post('/api/backup/telegram/test', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
+    const schema = z.object({
+      botToken: z.string().trim().min(10).max(128),
+      chatId: z.string().trim().min(1).max(64),
+    }).strict();
+    const p = schema.safeParse(req.body);
+    if (!p.success) return apiError(res, 400, 'INVALID_INPUT');
+    try {
+      const result = await testTelegramConnection(p.data.botToken, p.data.chatId);
+      await audit(req.admin.id, 'backup.telegram_test', 'system', null, { chatId: p.data.chatId }, clientIp(req));
+      res.json(result);
+    } catch (e) {
+      res.status(400).json({ ok: false, error: e.message });
+    }
+  }));
+
+  app.post('/api/backup/telegram/send-now', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
+    try {
+      const result = await sendTelegramBackup();
+      await audit(req.admin.id, 'backup.telegram_send', 'system', null, result, clientIp(req));
+      res.json(result);
+    } catch (e) {
+      res.status(400).json({ ok: false, error: e.message });
     }
   }));
 }

@@ -18,6 +18,7 @@ import {
 import { randomPassword } from './crypto.js';
 import { androidProfile, iosProfile, windowsProfile, windowsLauncher, downloadPageHtml, jsonProfile } from './profiles.js';
 import { audit } from './audit.js';
+import { recordEvent } from './services/observability.js';
 import { getLiveSessions, startWorker, disconnectUser } from './worker.js';
 import { disconnectIkeId } from './vpn.js';
 import { runMigrations } from './migrate.js';
@@ -340,6 +341,31 @@ app.get('/d/:token/android', asyncHandler(async (req, res) => { const u = await 
 app.get('/d/:token/ios', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Type': 'application/x-apple-aspen-config', 'Content-Disposition': `attachment; filename="${u.username}.mobileconfig"` }); res.send(await iosProfile(u)); }));
 app.get('/d/:token/windows', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Disposition': `attachment; filename="${u.username}-windows-setup.ps1"` }); res.send(await windowsProfile(u)); }));
 app.get('/d/:token/windows-launcher', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Disposition': `attachment; filename="${u.username}-windows-install.cmd"` }); res.send(windowsLauncher(req.params.token, req)); }));
+
+app.post('/d/:token/telemetry', asyncHandler(async (req, res) => {
+  const u = await tokenUser(req.params.token);
+  if (!u) return res.status(404).json({ error: 'Expired' });
+  const { event = 'client.windows_log', level = 'info', errorCode, errorMsg, clientVersion = '3.1.0', logs } = req.body || {};
+  const status = errorCode ? 'failed' : (level === 'error' ? 'failed' : 'success');
+  const safeLevel = (level === 'error' || level === 'warn') ? level : 'info';
+  await recordEvent({
+    level: safeLevel,
+    event: String(event).slice(0, 100),
+    action: 'windows_client',
+    status,
+    userId: u.id,
+    source: 'windows-client',
+    metadata: {
+      username: u.username,
+      clientIp: req.ip || req.socket.remoteAddress,
+      errorCode: errorCode ? String(errorCode) : null,
+      errorMsg: errorMsg ? String(errorMsg).slice(0, 500) : null,
+      clientVersion,
+      recentLogs: Array.isArray(logs) ? logs.slice(-10) : logs,
+    },
+  });
+  res.json({ ok: true });
+}));
 
 app.get(['/d/:token/windows-client.exe', '/d/:token/windows-client', '/download/windows-client.exe', '/download/ZVPN-Windows-Client.exe'], (req, res) => {
   const possiblePaths = [

@@ -13,6 +13,16 @@ const DEFAULTS = {
   },
   appearance: { theme: 'dark', animations: true, threeJs: true, glassIntensity: 0.12 },
   download: { tokenDays: 30, pageTitle: '', supportText: '' },
+  telegram: {
+    enabled: false,
+    botToken: '',
+    chatId: '',
+    intervalHours: 1,
+    includeAdmins: true,
+    lastBackupAt: null,
+    lastStatus: null,
+    lastError: null,
+  },
 };
 
 const SETTINGS_SCHEMAS = {
@@ -37,6 +47,16 @@ const SETTINGS_SCHEMAS = {
     tokenDays: z.coerce.number().int().min(1).max(365).optional(),
     pageTitle: z.string().trim().max(120).optional(),
     supportText: z.string().trim().max(500).optional(),
+  }).strict(),
+  telegram: z.object({
+    enabled: z.boolean().optional(),
+    botToken: z.string().trim().max(128).optional(),
+    chatId: z.string().trim().max(64).optional(),
+    intervalHours: z.coerce.number().int().min(1).max(168).optional(),
+    includeAdmins: z.boolean().optional(),
+    lastBackupAt: z.string().nullable().optional(),
+    lastStatus: z.string().nullable().optional(),
+    lastError: z.string().nullable().optional(),
   }).strict(),
 };
 

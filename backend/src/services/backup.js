@@ -1,8 +1,9 @@
 import { db, many, one, tx } from '../db.js';
 import { createHash } from 'node:crypto';
 import { config } from '../config.js';
+import { encryptSecret, decryptSecret } from '../crypto.js';
 import { getSettings, validateSettingsPatch } from './settings.js';
-import { queueSyncSecrets } from './syncQueue.js';
+import { queueSyncSecrets, syncSecretsNow } from './syncQueue.js';
 import { invalidateVpnConfigCache } from './vpnConfig.js';
 
 const EXPORT_VERSION = 2;
@@ -11,8 +12,8 @@ function digestPayload(payload) {
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
-export async function exportPanelBackup({ includeAdmins = false } = {}) {
-  const [settings, users, admins, usageDaily, usageHourly] = await Promise.all([
+export async function exportPanelBackup({ includeAdmins = true, includeCerts = true } = {}) {
+  const [settings, rawUsers, admins, usageDaily, usageHourly] = await Promise.all([
     getSettings(),
     many('SELECT * FROM vpn_users ORDER BY username'),
     includeAdmins
@@ -21,6 +22,39 @@ export async function exportPanelBackup({ includeAdmins = false } = {}) {
     many('SELECT * FROM usage_daily ORDER BY user_id, usage_date'),
     many('SELECT * FROM usage_hourly ORDER BY user_id, hour_ts'),
   ]);
+
+  const users = rawUsers.map((u) => {
+    let plain = null;
+    try {
+      if (u.secret_enc) {
+        plain = decryptSecret(u.secret_enc);
+      }
+    } catch {
+      plain = null;
+    }
+    return {
+      ...u,
+      secret_plain: plain,
+    };
+  });
+
+  let certificates = null;
+  if (includeCerts) {
+    try {
+      const fs = await import('node:fs/promises');
+      const [caCert, caKey, serverCert, serverKey] = await Promise.all([
+        fs.readFile('/etc/ipsec.d/cacerts/ikev2-ca-cert.pem', 'utf8').catch(() => null),
+        fs.readFile('/etc/ipsec.d/private/ikev2-ca-key.pem', 'utf8').catch(() => null),
+        fs.readFile('/etc/ipsec.d/certs/ikev2-server-cert.pem', 'utf8').catch(() => null),
+        fs.readFile('/etc/ipsec.d/private/ikev2-server-key.pem', 'utf8').catch(() => null),
+      ]);
+      if (caCert || serverCert) {
+        certificates = { caCert, caKey, serverCert, serverKey };
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
 
   const payload = {
     format: 'zvpn-panel-backup',
@@ -33,14 +67,11 @@ export async function exportPanelBackup({ includeAdmins = false } = {}) {
       vpnServer: config.vpnServer,
       vpnRemoteId: config.vpnRemoteId,
       timezone: config.timezone,
-      note: 'برای بازیابی کامل، MASTER_KEY در .env سرور جدید باید با سرور قبلی یکسان باشد.',
     },
     settings,
-    // Password hashes are excluded unless an operator explicitly requests a
-    // full administrator backup. VPN encrypted secrets remain available for
-    // restore and are protected by the deployment MASTER_KEY.
     admins,
     users,
+    certificates,
     usageDaily,
     usageHourly,
     counts: {
@@ -66,9 +97,8 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
   const seenUsers = new Set();
   for (const user of data.users) {
     if (!user || typeof user !== 'object' || !validUsername.test(String(user.username || ''))
-      || seenUsers.has(user.username) || typeof user.secret_enc !== 'string'
-      || user.secret_enc.length > 512 || typeof user.download_token !== 'string'
-      || user.download_token.length > 512 || !Number.isInteger(Number(user.max_devices ?? 1))
+      || seenUsers.has(user.username) || (typeof user.secret_enc !== 'string' && typeof user.secret_plain !== 'string' && typeof user.password !== 'string')
+      || !Number.isInteger(Number(user.max_devices ?? 1))
       || Number(user.max_devices ?? 1) < 1 || Number(user.max_devices ?? 1) > 10) {
       throw new Error('INVALID_BACKUP_USERS');
     }
@@ -76,10 +106,24 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
   }
   if (data.settings && typeof data.settings === 'object') {
     for (const [key, value] of Object.entries(data.settings)) {
-      if (['general', 'vpn', 'appearance', 'download'].includes(key)) {
+      if (['general', 'vpn', 'appearance', 'download', 'telegram'].includes(key)) {
         const parsed = validateSettingsPatch(key, value);
         if (!parsed.success) throw new Error('INVALID_BACKUP_SETTINGS');
       }
+    }
+  }
+
+  // Restore certificates if available
+  if (data.certificates && typeof data.certificates === 'object') {
+    try {
+      const fs = await import('node:fs/promises');
+      const { caCert, caKey, serverCert, serverKey } = data.certificates;
+      if (caCert) await fs.writeFile('/etc/ipsec.d/cacerts/ikev2-ca-cert.pem', caCert, { mode: 0o644 }).catch(() => null);
+      if (caKey) await fs.writeFile('/etc/ipsec.d/private/ikev2-ca-key.pem', caKey, { mode: 0o600 }).catch(() => null);
+      if (serverCert) await fs.writeFile('/etc/ipsec.d/certs/ikev2-server-cert.pem', serverCert, { mode: 0o644 }).catch(() => null);
+      if (serverKey) await fs.writeFile('/etc/ipsec.d/private/ikev2-server-key.pem', serverKey, { mode: 0o600 }).catch(() => null);
+    } catch (e) {
+      console.warn('[backup.import] certificate restore warning:', e.message);
     }
   }
 
@@ -88,7 +132,7 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
   await tx(async (client) => {
     if (data.settings && mode !== 'users-only') {
       for (const [key, value] of Object.entries(data.settings)) {
-        if (!value || typeof value !== 'object' || !['general', 'vpn', 'appearance', 'download'].includes(key)) continue;
+        if (!value || typeof value !== 'object' || !['general', 'vpn', 'appearance', 'download', 'telegram'].includes(key)) continue;
         await client.query(
           `INSERT INTO panel_settings(key, value, updated_at) VALUES($1, $2::jsonb, now())
            ON CONFLICT(key) DO UPDATE SET value=$2::jsonb, updated_at=now()`,
@@ -114,10 +158,18 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
     }
 
     for (const u of data.users) {
-      if (!u.username || !u.secret_enc || !u.download_token) {
+      let secretEnc = u.secret_enc;
+      if (u.secret_plain) {
+        secretEnc = encryptSecret(u.secret_plain);
+      } else if (u.password) {
+        secretEnc = encryptSecret(u.password);
+      }
+
+      if (!u.username || !secretEnc) {
         result.skipped.users++;
         continue;
       }
+
       const existing = await client.query('SELECT id FROM vpn_users WHERE username=$1', [u.username]);
       if (existing.rowCount && mode === 'merge') {
         await client.query(
@@ -131,7 +183,7 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
             note=$24, updated_at=now()
            WHERE username=$1`,
           [
-            u.username, u.secret_enc, u.enabled ?? true, u.quota_blocked ?? false, u.quota_reason,
+            u.username, secretEnc, u.enabled ?? true, u.quota_blocked ?? false, u.quota_reason,
             u.expires_at, u.duration_days, u.first_connected_at, u.activation_status || 'activated',
             u.provisioning_status || 'active', u.daily_limit_bytes, u.total_limit_bytes,
             u.unlimited_traffic ?? false, u.max_devices ?? 1, u.usage_total ?? 0,
@@ -155,7 +207,7 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
             COALESCE($26::timestamptz, now()), now()
           )`,
           [
-            u.id, u.username, u.secret_enc, u.enabled ?? true, u.quota_blocked ?? false,
+            u.id, u.username, secretEnc, u.enabled ?? true, u.quota_blocked ?? false,
             u.quota_reason, u.expires_at, u.duration_days, u.first_connected_at,
             u.activation_status || 'activated', u.provisioning_status || 'active',
             u.daily_limit_bytes, u.total_limit_bytes, u.unlimited_traffic ?? false,
@@ -192,5 +244,10 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
   });
 
   queueSyncSecrets();
+  try {
+    await syncSecretsNow();
+  } catch {
+    // Non-fatal if sync is queued
+  }
   return result;
 }

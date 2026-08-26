@@ -5,6 +5,7 @@ import { getMaxDevicesPolicy } from './services/settings.js';
 import { queueSyncSecrets } from './services/syncQueue.js';
 import { SessionReconciler } from './services/sessionReconciler.js';
 import { recordEvent } from './services/observability.js';
+import { checkAndDispatchTelegramBackup } from './services/telegramBackup.js';
 
 let running = false;
 let lastSessions = [];
@@ -179,4 +180,6 @@ export async function disconnectUser(username) {
 export function startWorker() {
   tick();
   setInterval(tick, config.pollMs).unref();
+  // Check telegram automated backup schedule every 60s
+  setInterval(checkAndDispatchTelegramBackup, 60000).unref();
 }

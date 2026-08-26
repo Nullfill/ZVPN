@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Settings, Server, Shield, Database, Lock, Key, Download, Upload } from 'lucide-react';
+import { Settings, Server, Shield, Database, Lock, Key, Download, Upload, Send, Bot, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { GlassCard, PageHeader, Modal } from '../components/UI';
 import { useToast } from '../components/Toast';
@@ -11,6 +11,16 @@ interface PanelSettings {
   vpn: { maxDevicesPolicy: string; serverAddress: string; remoteId: string; dns: string };
   appearance: { theme: string; animations: boolean; threeJs: boolean; glassIntensity: number };
   download: { tokenDays: number; pageTitle: string; supportText: string };
+  telegram: {
+    enabled: boolean;
+    botToken: string;
+    chatId: string;
+    intervalHours: number;
+    includeAdmins: boolean;
+    lastBackupAt: string | null;
+    lastStatus: 'success' | 'error' | null;
+    lastError: string | null;
+  };
 }
 
 export default function SettingsPage() {
@@ -22,6 +32,15 @@ export default function SettingsPage() {
   // Form states
   const [generalForm, setGeneralForm] = useState({ panelName: '', timezone: '', domain: '' });
   const [vpnForm, setVpnForm] = useState({ maxDevicesPolicy: 'disconnect_oldest', dns: '' });
+  const [telegramForm, setTelegramForm] = useState({
+    enabled: false,
+    botToken: '',
+    chatId: '',
+    intervalHours: 1,
+    includeAdmins: true,
+  });
+  const [testingTelegram, setTestingTelegram] = useState(false);
+  const [sendingTelegramNow, setSendingTelegramNow] = useState(false);
   const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' });
   const [importMode, setImportMode] = useState<'merge' | 'full' | 'users-only'>('merge');
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
@@ -48,6 +67,15 @@ export default function SettingsPage() {
         maxDevicesPolicy: data.settings.vpn?.maxDevicesPolicy || 'disconnect_oldest',
         dns: data.settings.vpn?.dns || '',
       });
+      if (data.settings.telegram) {
+        setTelegramForm({
+          enabled: Boolean(data.settings.telegram.enabled),
+          botToken: data.settings.telegram.botToken || '',
+          chatId: data.settings.telegram.chatId || '',
+          intervalHours: Number(data.settings.telegram.intervalHours || 1),
+          includeAdmins: data.settings.telegram.includeAdmins ?? true,
+        });
+      }
     }
   }, [data]);
 
