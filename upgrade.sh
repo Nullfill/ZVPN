@@ -174,7 +174,7 @@ fi
 info "Ensuring strongSwan EAP-MSCHAPv2 and PKI plugins..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y --no-install-recommends strongswan-pki libcharon-extra-plugins libstrongswan-extra-plugins libstrongswan-standard-plugins >/dev/null 2>&1 || true
+apt-get install -y --no-install-recommends strongswan-pki libcharon-extra-plugins libcharon-extauth-plugins libstrongswan-extra-plugins libstrongswan-standard-plugins >/dev/null 2>&1 || true
 
 mkdir -p /etc/strongswan.d/charon
 for plugin in eap-mschapv2 md4 des openssl fips-prf gmp; do

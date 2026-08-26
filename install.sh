@@ -63,7 +63,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends \
   postgresql postgresql-client strongswan strongswan-pki strongswan-swanctl strongswan-starter \
-  libcharon-extra-plugins libstrongswan-extra-plugins libstrongswan-standard-plugins \
+  libcharon-extra-plugins libcharon-extauth-plugins libstrongswan-extra-plugins libstrongswan-standard-plugins \
   nginx rsync openssl curl python3 certbot python3-certbot-nginx dnsutils >/dev/null
 
 # 4. Ensure Node.js 20+
