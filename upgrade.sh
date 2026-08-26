@@ -171,12 +171,10 @@ if [[ -f "$APP_DIR/backend/scripts/patch-v2.1-server.js" ]]; then
   (cd "$APP_DIR/backend" && node scripts/patch-v2.1-server.js) || warn "patch-v2.1-server.js failed — check server.js manually"
 fi
 
-if ! command -v pki >/dev/null; then
-  info "Installing strongSwan PKI tools..."
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq
-  apt-get install -y --no-install-recommends strongswan-pki libstrongswan-extra-plugins libstrongswan-standard-plugins >/dev/null 2>&1 || true
-fi
+info "Ensuring strongSwan EAP-MSCHAPv2 and PKI plugins..."
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y --no-install-recommends strongswan-pki libcharon-extra-plugins libcharon-extauth libstrongswan-extra-plugins libstrongswan-standard-plugins >/dev/null 2>&1 || true
 
 info "Updating systemd unit..."
 install -o root -g root -m 0644 "$APP_DIR/ops/systemd/zvpn-panel.service" /etc/systemd/system/zvpn-panel.service
