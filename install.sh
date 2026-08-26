@@ -309,7 +309,13 @@ sed "s/__DOMAIN__/${DOMAIN}/g" "$APP/ops/nginx/zvpn.conf.template" > /etc/nginx/
 ln -sfn /etc/nginx/sites-available/zvpn-panel /etc/nginx/sites-enabled/zvpn-panel
 nginx -t >/dev/null 2>&1 || die "Nginx configuration test failed"
 
-# 16. Enable & Start Services
+# 16. Apply Speed & Kernel Network Optimization (BBR, MSS Clamping, Buffers)
+if [[ -f "$APP/ops/optimize-speed.sh" ]]; then
+  log "Applying BBR, TCP MSS Clamping, and kernel network speed optimizations..."
+  bash "$APP/ops/optimize-speed.sh" || warn "Speed optimizations skipped"
+fi
+
+# 17. Enable & Start Services
 log "Enabling and starting system services..."
 install -o root -g root -m 0644 "$APP/ops/systemd/zvpn-panel.service" /etc/systemd/system/zvpn-panel.service
 systemctl daemon-reload

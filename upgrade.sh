@@ -181,6 +181,11 @@ for plugin in eap-mschapv2 md4 des openssl fips-prf gmp; do
   printf '%s {\n    load = yes\n}\n' "$plugin" > "/etc/strongswan.d/charon/${plugin}.conf"
 done
 
+if [[ -f "$APP_DIR/ops/optimize-speed.sh" ]]; then
+  info "Applying BBR, TCP MSS clamping, and kernel speed optimizations..."
+  bash "$APP_DIR/ops/optimize-speed.sh" || warn "Speed optimizations skipped"
+fi
+
 info "Updating systemd unit..."
 install -o root -g root -m 0644 "$APP_DIR/ops/systemd/zvpn-panel.service" /etc/systemd/system/zvpn-panel.service
 systemctl daemon-reload
