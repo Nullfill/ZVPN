@@ -45,8 +45,9 @@ EOF
 
 echo "=== [4/5] Enabling Hardware-Accelerated AES-GCM Cipher Proposals ==="
 if [ -f /etc/ipsec.conf ]; then
-    sed -i "s/esp=.*/esp=aes128gcm128-ecp256,aes256gcm128-ecp384,aes128gcm128,aes256gcm128,aes128-sha256!/" /etc/ipsec.conf
-    sed -i "s/ike=.*/ike=aes128gcm128-prfsha256-ecp256,aes256gcm128-prfsha384-ecp384,aes128-sha256-modp2048!/" /etc/ipsec.conf
+    sed -i "s/^[[:space:]]*esp=.*/    esp=aes128gcm128,aes256gcm128,aes128-sha256,aes256-sha256,aes128-sha1,aes256-sha1!/" /etc/ipsec.conf
+    sed -i "s/^[[:space:]]*ike=.*/    ike=aes128gcm128-sha256-ecp256,aes256gcm128-sha256-ecp256,aes128-sha256-ecp256,aes256-sha256-ecp384,aes128-sha256-modp2048,aes256-sha256-modp2048,aes128-sha1-modp1024,aes256-sha1-modp1024!/" /etc/ipsec.conf
+    sed -i "s/^[[:space:]]*mobike=.*/    mobike=yes/" /etc/ipsec.conf
 fi
 
 echo "=== [5/5] Restarting Services and Verifying ==="
