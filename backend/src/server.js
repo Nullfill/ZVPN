@@ -176,14 +176,14 @@ app.post('/api/users/bulk', requireAdmin, operatorOnly, asyncHandler(async (req,
 app.get('/api/users/:id', requireAdmin, requireUserId, asyncHandler(async (req, res) => {
   const user = await getUserById(req.params.id);
   if (!user) return apiError(res, 404, 'NOT_FOUND');
-  res.json({ user, stats: await getUserStats(req.params.id), links: user.downloadToken ? downloadLinks(user.downloadToken) : null });
+  res.json({ user, stats: await getUserStats(req.params.id), links: user.downloadToken ? downloadLinks(user.downloadToken, req) : null });
 }));
 
 app.post('/api/users', requireAdmin, operatorOnly, asyncHandler(async (req, res) => {
   const p = userSchema.safeParse(req.body);
   if (!p.success) return apiError(res, 400, 'INVALID_INPUT', p.error.flatten());
   try {
-    const result = await provisionUser(p.data);
+    const result = await provisionUser(p.data, req);
     await audit(req.admin.id, 'user.create', 'user', result.user.id, { username: result.user.username }, clientIp(req));
     res.status(201).json(result);
   } catch (e) {
@@ -222,14 +222,14 @@ app.post('/api/users/:id/add-traffic', requireAdmin, operatorOnly, requireUserId
 app.post('/api/users/:id/reset-password', requireAdmin, operatorOnly, requireUserId, asyncHandler(async (req, res) => {
   const parsed = z.object({ password: z.string().min(8).max(128).optional() }).strict().safeParse(req.body);
   if (!parsed.success) return apiError(res, 400, 'INVALID_INPUT', parsed.error.flatten());
-  const result = await resetUserPassword(req.params.id, parsed.data.password || randomPassword());
+  const result = await resetUserPassword(req.params.id, parsed.data.password || randomPassword(), req);
   if (!result) return apiError(res, 404, 'NOT_FOUND');
   await audit(req.admin.id, 'user.password_reset', 'user', req.params.id, { syncOk: result.syncOk }, clientIp(req));
   res.json(result);
 }));
 
 app.post('/api/users/:id/regenerate-link', requireAdmin, operatorOnly, requireUserId, asyncHandler(async (req, res) => {
-  const l = await regenerateToken(req.params.id);
+  const l = await regenerateToken(req.params.id, req);
   if (!l) return apiError(res, 404, 'NOT_FOUND');
   res.json({ links: l });
 }));
@@ -321,7 +321,7 @@ app.get('/d/:token', asyncHandler(async (req, res) => {
     [u.id, config.timezone],
   );
   u.today_bytes = today?.bytes || 0;
-  const html = await downloadPageHtml(u, downloadLinks(req.params.token), s);
+  const html = await downloadPageHtml(u, downloadLinks(req.params.token, req), s);
   res.type('html').send(html);
 }));
 
@@ -339,7 +339,7 @@ app.get('/d/:token/json', asyncHandler(async (req, res) => {
 app.get('/d/:token/android', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Type': 'application/vnd.strongswan.profile', 'Content-Disposition': `attachment; filename="${u.username}.sswan"` }); res.send(await androidProfile(u)); }));
 app.get('/d/:token/ios', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Type': 'application/x-apple-aspen-config', 'Content-Disposition': `attachment; filename="${u.username}.mobileconfig"` }); res.send(await iosProfile(u)); }));
 app.get('/d/:token/windows', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Disposition': `attachment; filename="${u.username}-windows-setup.ps1"` }); res.send(await windowsProfile(u)); }));
-app.get('/d/:token/windows-launcher', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Disposition': `attachment; filename="${u.username}-windows-install.cmd"` }); res.send(windowsLauncher(req.params.token)); }));
+app.get('/d/:token/windows-launcher', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Disposition': `attachment; filename="${u.username}-windows-install.cmd"` }); res.send(windowsLauncher(req.params.token, req)); }));
 
 app.get(['/d/:token/windows-client.exe', '/d/:token/windows-client', '/download/windows-client.exe', '/download/ZVPN-Windows-Client.exe'], (req, res) => {
   const possiblePaths = [

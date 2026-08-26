@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, Settings, Power, Wifi, KeyRound, Trash2, Copy, ExternalLink } from 'lucide-react';
-import { api, VpnUser, DownloadLinks } from '../lib/api';
+import { api, VpnUser, DownloadLinks, normalizeLinks } from '../lib/api';
 import { fmtBytes, fmtDate, statusLabel, statusBadge, gbToBytes, bytesToGb } from '../lib/format';
 import { GlassCard, EmptyState, Modal, ProgressBar } from '../components/UI';
 import { useToast } from '../components/Toast';
@@ -117,7 +117,7 @@ export default function UsersPage() {
         onDone={(r) => {
           setModal(null);
           qc.invalidateQueries({ queryKey: ['users'] });
-          if (r) setReveal(r);
+          if (r) setReveal({ ...r, links: normalizeLinks(r.links) });
           toast(modal === 'create' ? 'کاربر با موفقیت ساخته شد' : 'تغییرات ذخیره شد', 'success');
         }}
       />
@@ -153,7 +153,7 @@ function UserActions({ u, onReveal }: { u: VpnUser; onReveal: (r: { title: strin
   const resetPw = async () => {
     if (!confirm(`رمز ${u.username} عوض شود؟`)) return;
     const d = await api<{ password: string; links: DownloadLinks }>(`/api/users/${u.id}/reset-password`, { method: 'POST', body: '{}' });
-    onReveal({ title: 'رمز جدید', password: d.password, links: d.links });
+    onReveal({ title: 'رمز جدید', password: d.password, links: normalizeLinks(d.links) });
     qc.invalidateQueries({ queryKey: ['users'] });
   };
   const del = async () => {

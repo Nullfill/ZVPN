@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Copy, ExternalLink, RefreshCw, Ban, Power, Trash2, KeyRound, Plus, Clock, Wifi, Pencil } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { api, DownloadLinks, VpnUser } from '../lib/api';
+import { api, DownloadLinks, VpnUser, normalizeLinks } from '../lib/api';
 import { fmtBytes, fmtDate, statusLabel, statusBadge, gbToBytes, bytesToGb } from '../lib/format';
 import { GlassCard, ProgressBar, ConfirmDialog, Modal, SkeletonGrid } from '../components/UI';
 import { useToast } from '../components/Toast';
@@ -27,7 +27,7 @@ export default function UserDetailPage() {
 
   if (isLoading || !data) return <SkeletonGrid n={3} />;
   const u = data.user;
-  const links = data.links;
+  const links = normalizeLinks(data.links);
   const chartDaily = (data.stats?.daily || []).map((d) => ({
     date: d.usage_date,
     gb: Number(d.bytes) / 1024 ** 3,

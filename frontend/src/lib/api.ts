@@ -75,6 +75,25 @@ export interface DownloadLinks {
   windowsLauncher: string;
 }
 
+export function normalizeLinks(links?: DownloadLinks | null): DownloadLinks | undefined {
+  if (!links) return undefined;
+  const fixUrl = (url: string) => {
+    if (!url) return '';
+    if (typeof window !== 'undefined' && (url.includes('127.0.0.1') || url.includes('localhost') || url.startsWith('/'))) {
+      const path = url.replace(/^https?:\/\/[^/]+/, '');
+      return `${window.location.origin}${path.startsWith('/') ? path : `/${path}`}`;
+    }
+    return url;
+  };
+  return {
+    landing: fixUrl(links.landing),
+    android: fixUrl(links.android),
+    ios: fixUrl(links.ios),
+    windows: fixUrl(links.windows),
+    windowsLauncher: fixUrl(links.windowsLauncher),
+  };
+}
+
 export interface DashboardData {
   totals: { users: number; active: number; online: number; todayBytes: number; bytes: number };
   system?: { load?: number; strongswan?: string; uptime?: number; memoryPercent?: number };

@@ -86,8 +86,16 @@ function psSingleQuote(s) {
   return String(s).replace(/'/g, "''");
 }
 
-export function windowsLauncher(token) {
-  const safeUrl = `${config.publicBaseUrl}/d/${token}/windows`.replace(/"/g, '');
+export function windowsLauncher(token, req = null) {
+  let base = config.publicBaseUrl;
+  if (req) {
+    const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+    const host = req.get('x-forwarded-host') || req.get('host');
+    if (host && !host.includes('127.0.0.1') && !host.includes('localhost')) {
+      base = `${proto}://${host}`;
+    }
+  }
+  const safeUrl = `${base}/d/${token}/windows`.replace(/"/g, '');
   return `@echo off
 setlocal
 chcp 65001 >nul

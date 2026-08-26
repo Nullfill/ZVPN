@@ -35,7 +35,18 @@ export function sanitizeUser(u, sessions = []) {
   };
 }
 
-export function downloadLinks(token) {
-  const base = `${process.env.PUBLIC_BASE_URL || 'http://127.0.0.1:3300'}`.replace(/\/$/, '') + `/d/${token}`;
-  return { landing: base, android: `${base}/android`, ios: `${base}/ios`, windows: `${base}/windows`, windowsLauncher: `${base}/windows-launcher` };
+export function downloadLinks(token, req = null) {
+  let base = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  if (req) {
+    const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+    const host = req.get('x-forwarded-host') || req.get('host');
+    if (host && !host.includes('127.0.0.1') && !host.includes('localhost')) {
+      base = `${proto}://${host}`;
+    }
+  }
+  if (!base || base.includes('127.0.0.1') || base.includes('localhost')) {
+    base = process.env.PUBLIC_BASE_URL || 'http://127.0.0.1:3300';
+  }
+  const root = `${base.replace(/\/$/, '')}/d/${token}`;
+  return { landing: root, android: `${root}/android`, ios: `${root}/ios`, windows: `${root}/windows`, windowsLauncher: `${root}/windows-launcher` };
 }

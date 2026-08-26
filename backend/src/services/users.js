@@ -5,8 +5,25 @@ import { syncSecretsNow, queueSyncSecrets } from './syncQueue.js';
 import { bytes, sanitizeUser, tokenExpiry } from '../utils/format.js';
 import { getLiveSessions, disconnectUser } from '../worker.js';
 
-function links(token) {
-  const base = `${config.publicBaseUrl}/d/${token}`;
+export function getBaseUrl(req = null) {
+  if (req) {
+    const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+    const host = req.get('x-forwarded-host') || req.get('host');
+    if (host && !host.includes('127.0.0.1') && !host.includes('localhost')) {
+      return `${proto}://${host}`;
+    }
+  }
+  if (config.publicBaseUrl && !config.publicBaseUrl.includes('127.0.0.1') && !config.publicBaseUrl.includes('localhost')) {
+    return config.publicBaseUrl;
+  }
+  if (config.vpnServer && config.vpnServer !== '127.0.0.1' && config.vpnServer !== 'localhost') {
+    return `http://${config.vpnServer}`;
+  }
+  return config.publicBaseUrl;
+}
+
+function links(token, req = null) {
+  const base = `${getBaseUrl(req)}/d/${token}`;
   return { landing: base, android: `${base}/android`, ios: `${base}/ios`, windows: `${base}/windows`, windowsLauncher: `${base}/windows-launcher` };
 }
 
@@ -22,7 +39,7 @@ export async function getUserById(id) {
   return u ? sanitizeUser(u, getLiveSessions()) : null;
 }
 
-export async function provisionUser(data) {
+export async function provisionUser(data, req = null) {
   const password = data.password || randomPassword();
   const token = randomToken();
   const activationStatus = data.durationDays && !data.expiresAt ? 'not_activated' : 'activated';
@@ -39,7 +56,7 @@ export async function provisionUser(data) {
     await db.query(`UPDATE vpn_users SET provisioning_status='failed', provisioning_error=$2 WHERE id=$1`, [row.id, e.message.slice(0, 500)]);
   }
   const full = await getUserById(row.id);
-  return { user: full, generatedPassword: password, links: links(token), syncOk: full?.provisioningStatus === 'active' };
+  return { user: full, generatedPassword: password, links: links(token, req), syncOk: full?.provisioningStatus === 'active' };
 }
 
 export async function updateUser(id, data) {
@@ -92,10 +109,10 @@ export async function deleteUser(id) {
   return true;
 }
 
-export async function regenerateToken(id) {
+export async function regenerateToken(id, req = null) {
   const token = randomToken();
   const r = await db.query('UPDATE vpn_users SET download_token=$1, download_token_expires_at=$2, download_token_revoked=false, updated_at=now() WHERE id=$3 RETURNING download_token', [token, tokenExpiry(config.downloadDays), id]);
-  return r.rowCount ? links(token) : null;
+  return r.rowCount ? links(token, req) : null;
 }
 
 export async function revokeToken(id) {
@@ -108,7 +125,7 @@ export async function revokeToken(id) {
  * A sync failure is reported to the caller and queued for retry; it is never
  * silently reported as a successful password change.
  */
-export async function resetUserPassword(id, password = randomPassword()) {
+export async function resetUserPassword(id, password = randomPassword(), req = null) {
   const u = await one('SELECT id, username FROM vpn_users WHERE id=$1', [id]);
   if (!u) return null;
   const token = randomToken();
@@ -127,7 +144,7 @@ export async function resetUserPassword(id, password = randomPassword()) {
     queueSyncSecrets();
   }
   if (syncOk) await disconnectUser(u.username);
-  return { password, links: links(token), syncOk };
+  return { password, links: links(token, req), syncOk };
 }
 
 export async function getUserStats(id) {

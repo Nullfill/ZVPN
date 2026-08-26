@@ -124,8 +124,22 @@ DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@127.0.0.1:5432/${DB_NAME}
 JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')
 MASTER_KEY=$(openssl rand -base64 48 | tr -d '\n')
 SECURE_COOKIES=false
+PUBLIC_BASE_URL=http://${DOMAIN}
+VPN_SERVER=${DOMAIN}
+VPN_REMOTE_ID=${DOMAIN}
 VPN_SECRETS_FILE=$ROOT/runtime/ipsec-users.secrets
 EOF
+else
+  if grep -q '^PUBLIC_BASE_URL=' "$ENV_FILE"; then
+    sed -i "s#^PUBLIC_BASE_URL=.*#PUBLIC_BASE_URL=http://${DOMAIN}#" "$ENV_FILE"
+  else
+    echo "PUBLIC_BASE_URL=http://${DOMAIN}" >> "$ENV_FILE"
+  fi
+  if grep -q '^VPN_SERVER=' "$ENV_FILE"; then
+    sed -i "s#^VPN_SERVER=.*#VPN_SERVER=${DOMAIN}#" "$ENV_FILE"
+  else
+    echo "VPN_SERVER=${DOMAIN}" >> "$ENV_FILE"
+  fi
 fi
 chown zvpn:zvpn "$ENV_FILE"
 chmod 600 "$ENV_FILE"
@@ -300,7 +314,13 @@ systemctl reload nginx
 # 17. Optional Let's Encrypt SSL (if real domain is used)
 if [[ "$DOMAIN" =~ [a-zA-Z] && ! "$DOMAIN" =~ ^[0-9.]+$ ]]; then
   log "Attempting automatic Let's Encrypt SSL certificate for $DOMAIN..."
-  certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect >/dev/null 2>&1 || warn "SSL provisioning skipped (check DNS propagation)"
+  if certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect >/dev/null 2>&1; then
+    sed -i "s#^PUBLIC_BASE_URL=http://#PUBLIC_BASE_URL=https://#" "$ENV_FILE" 2>/dev/null || true
+    systemctl restart zvpn-panel
+    ok "Let's Encrypt SSL certificate active"
+  else
+    warn "SSL provisioning skipped (check DNS propagation)"
+  fi
 fi
 
 sleep 2
