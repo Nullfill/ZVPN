@@ -176,6 +176,11 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends strongswan-pki libcharon-extra-plugins libstrongswan-extra-plugins libstrongswan-standard-plugins >/dev/null 2>&1 || true
 
+mkdir -p /etc/strongswan.d/charon
+for plugin in eap-mschapv2 md4 des openssl fips-prf gmp; do
+  printf '%s {\n    load = yes\n}\n' "$plugin" > "/etc/strongswan.d/charon/${plugin}.conf"
+done
+
 info "Updating systemd unit..."
 install -o root -g root -m 0644 "$APP_DIR/ops/systemd/zvpn-panel.service" /etc/systemd/system/zvpn-panel.service
 systemctl daemon-reload

@@ -257,6 +257,12 @@ touch /etc/ipsec.d/zvpn-users.secrets
 chmod 600 /etc/ipsec.secrets /etc/ipsec.d/zvpn-users.secrets
 chown root:root /etc/ipsec.secrets /etc/ipsec.d/zvpn-users.secrets
 
+# Ensure charon plugins (EAP-MSCHAPv2, MD4, DES, OpenSSL) are enabled
+mkdir -p /etc/strongswan.d/charon
+for plugin in eap-mschapv2 md4 des openssl fips-prf gmp; do
+  printf '%s {\n    load = yes\n}\n' "$plugin" > "/etc/strongswan.d/charon/${plugin}.conf"
+done
+
 # 11. Sudoers Permissions for helper
 cat > /etc/sudoers.d/zvpn-panel <<'SUDOERS'
 zvpn ALL=(root) NOPASSWD: /usr/local/sbin/zvpn-helper sync-secrets, /usr/local/sbin/zvpn-helper reread-secrets, /usr/local/sbin/zvpn-helper list-sas, /usr/local/sbin/zvpn-helper terminate *, /usr/local/sbin/zvpn-helper status, /usr/local/sbin/zvpn-helper cert-info, /usr/local/sbin/zvpn-helper resolve-host *, /usr/local/sbin/zvpn-helper check-ike-ports, /usr/local/sbin/zvpn-helper endpoint-backup, /usr/local/sbin/zvpn-helper endpoint-rollback /var/lib/zvpn-panel/endpoint-backups/*, /usr/local/sbin/zvpn-helper issue-server-cert *, /usr/local/sbin/zvpn-helper set-leftid *, /usr/local/sbin/zvpn-helper normalize-conn, /usr/local/sbin/zvpn-helper strongswan-logs, /usr/local/sbin/zvpn-helper restart-strongswan
