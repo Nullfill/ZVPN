@@ -8,22 +8,34 @@ warn(){ echo -e "${Y}⚠ WARNING${N} $1"; }
 echo -e "${C}ZVPN Panel Doctor v${VER}${N}"
 echo
 
-check(){ if eval "$2" >/dev/null 2>&1; then pass "$1"; return 0; else fail "$1"; return 1; fi; }
+check(){
+  local name="$1" cmd="$2" retries="${3:-1}"
+  for ((i=1; i<=retries; i++)); do
+    if eval "$cmd" >/dev/null 2>&1; then
+      pass "$name"
+      return 0
+    fi
+    [[ $i -lt $retries ]] && sleep 1
+  done
+  fail "$name"
+  return 1
+}
 
-check "strongSwan service" "systemctl is-active --quiet strongswan-starter"
-check "IKE UDP/500" "ss -lun | grep -q ':500 '"
-check "NAT-T UDP/4500" "ss -lun | grep -q ':4500 '"
-check "VICI / swanctl" "sudo /usr/local/sbin/zvpn-helper list-sas"
-check "Panel backend service" "systemctl is-active --quiet zvpn-panel"
-check "Backend health API" "curl -fsS http://127.0.0.1:3300/api/health"
-check "Nginx config" "nginx -t"
-check "PostgreSQL" "systemctl is-active --quiet postgresql"
-check "Runtime secrets (panel rw)" "sudo -u zvpn test -r /opt/zvpn-panel/runtime/ipsec-users.secrets && sudo -u zvpn test -w /opt/zvpn-panel/runtime/ipsec-users.secrets"
-check "strongSwan secrets 600 root" "test \"$(stat -c '%U:%G:%a' /etc/ipsec.d/zvpn-users.secrets 2>/dev/null)\" = 'root:root:600'"
-check "secrets include path" "grep -q '^include /etc/ipsec.d/zvpn-users.secrets$' /etc/ipsec.secrets"
-check "Windows IKE proposal" "grep -qE '^[[:space:]]*ike=.*aes128-sha256-ecp256' /etc/ipsec.conf"
-check "Windows ESP proposal" "grep -qE '^[[:space:]]*esp=.*aes128-sha256' /etc/ipsec.conf"
-check "IP forwarding" "test \"$(sysctl -n net.ipv4.ip_forward 2>/dev/null)\" = \"1\""
+check "strongSwan service" "systemctl is-active --quiet strongswan-starter" 3
+check "IKE UDP/500" "ss -lun | grep -q ':500 '" 3
+check "NAT-T UDP/4500" "ss -lun | grep -q ':4500 '" 3
+check "VICI / swanctl" "sudo /usr/local/sbin/zvpn-helper list-sas" 2
+check "strongSwan PKI tool" "command -v pki >/dev/null" 1
+check "Panel backend service" "systemctl is-active --quiet zvpn-panel" 3
+check "Backend health API" "curl -fsS http://127.0.0.1:3300/api/health" 5
+check "Nginx config" "nginx -t" 1
+check "PostgreSQL" "systemctl is-active --quiet postgresql" 2
+check "Runtime secrets (panel rw)" "sudo -u zvpn test -r /opt/zvpn-panel/runtime/ipsec-users.secrets && sudo -u zvpn test -w /opt/zvpn-panel/runtime/ipsec-users.secrets" 1
+check "strongSwan secrets 600 root" "test \"$(stat -c '%U:%G:%a' /etc/ipsec.d/zvpn-users.secrets 2>/dev/null)\" = 'root:root:600'" 1
+check "secrets include path" "grep -q '^include /etc/ipsec.d/zvpn-users.secrets$' /etc/ipsec.secrets" 1
+check "Windows IKE proposal" "grep -qE '^[[:space:]]*ike=.*aes128-sha256-ecp256' /etc/ipsec.conf" 1
+check "Windows ESP proposal" "grep -qE '^[[:space:]]*esp=.*aes128-sha256' /etc/ipsec.conf" 1
+check "IP forwarding" "test \"$(sysctl -n net.ipv4.ip_forward 2>/dev/null)\" = \"1\"" 1
 
 if [[ -f /opt/zvpn-panel/app/backend/.env ]]; then
   DB_URL="$(grep '^DATABASE_URL=' /opt/zvpn-panel/app/backend/.env | cut -d= -f2-)"

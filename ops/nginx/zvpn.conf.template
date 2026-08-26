@@ -1,9 +1,9 @@
 server {
-    listen 80;
-    listen [::]:80;
-    server_name __DOMAIN__;
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name __DOMAIN__ _;
 
-    client_max_body_size 1m;
+    client_max_body_size 16m;
 
     root /opt/zvpn-panel/app/frontend/dist;
     index index.html;
@@ -15,7 +15,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 30s;
+        proxy_read_timeout 60s;
     }
 
     location /d/ {
@@ -42,5 +42,5 @@ server {
 
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
-    add_header X-Frame-Options DENY always;
+    add_header X-Frame-Options SAMEORIGIN always;
 }

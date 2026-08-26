@@ -171,6 +171,13 @@ if [[ -f "$APP_DIR/backend/scripts/patch-v2.1-server.js" ]]; then
   (cd "$APP_DIR/backend" && node scripts/patch-v2.1-server.js) || warn "patch-v2.1-server.js failed — check server.js manually"
 fi
 
+if ! command -v pki >/dev/null; then
+  info "Installing strongSwan PKI tools..."
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq
+  apt-get install -y --no-install-recommends strongswan-pki libstrongswan-extra-plugins libstrongswan-standard-plugins >/dev/null 2>&1 || true
+fi
+
 info "Updating systemd unit..."
 install -o root -g root -m 0644 "$APP_DIR/ops/systemd/zvpn-panel.service" /etc/systemd/system/zvpn-panel.service
 systemctl daemon-reload
@@ -192,7 +199,13 @@ if ! curl -fsS http://127.0.0.1:3300/api/health >/dev/null; then
   die "Panel health check failed"
 fi
 
-nginx -t >/dev/null 2>&1 && ok "Nginx config OK (HTTPS preserved)" || warn "nginx -t failed — check manually"
+rm -f /etc/nginx/sites-enabled/default
+if nginx -t >/dev/null 2>&1; then
+  systemctl reload nginx
+  ok "Nginx reloaded successfully"
+else
+  warn "nginx -t failed — check manually"
+fi
 
 echo
 if [[ -f "$APP_DIR/doctor.sh" ]]; then
@@ -203,5 +216,5 @@ echo
 echo "---------------------------------------------"
 echo "ZVPN Panel upgraded successfully to $NEW_VERSION"
 echo "Database / .env / CA / Let's Encrypt preserved."
-echo "Set VPN server address: Admin → Settings → ike.spinbox.ir"
+echo "Set VPN server address: Admin → Settings"
 echo "---------------------------------------------"
