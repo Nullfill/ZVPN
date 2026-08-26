@@ -55,4 +55,6 @@ clients/windows/dist/
 clients/windows/*.spec
 clients/windows/ZVPN-Windows-Client.exe
 backend/public/
+__pycache__/
+*.pyc
 

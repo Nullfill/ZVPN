@@ -98,6 +98,54 @@ export default function SettingsPage() {
     onError: (e: Error) => toast(e.message, 'error'),
   });
 
+  const updateTelegram = useMutation({
+    mutationFn: () => api('/api/settings/telegram', { method: 'PATCH', body: JSON.stringify(telegramForm) }),
+    onSuccess: () => {
+      toast('تنظیمات بک‌آپ تلگرام با موفقیت ذخیره شد.', 'success');
+      qc.invalidateQueries({ queryKey: ['settings'] });
+    },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+
+  const testTelegram = async () => {
+    if (!telegramForm.botToken || !telegramForm.chatId) {
+      toast('لطفاً توکن ربات و شناسه چت را وارد کنید.', 'error');
+      return;
+    }
+    setTestingTelegram(true);
+    try {
+      const res = await api<{ ok: boolean; message?: string }>('/api/backup/telegram/test', {
+        method: 'POST',
+        body: JSON.stringify({ botToken: telegramForm.botToken, chatId: telegramForm.chatId }),
+      });
+      if (res.ok) {
+        toast('پیام تست با موفقیت به تلگرام ارسال شد!', 'success');
+      }
+    } catch (e: any) {
+      toast(e.message || 'خطا در ارتباط با تلگرام', 'error');
+    } finally {
+      setTestingTelegram(false);
+    }
+  };
+
+  const sendBackupNow = async () => {
+    setSendingTelegramNow(true);
+    try {
+      const res = await api<{ ok: boolean; filename: string }>('/api/backup/telegram/send-now', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        toast(`بک‌آپ با موفقیت به تلگرام ارسال شد (${res.filename})`, 'success');
+        qc.invalidateQueries({ queryKey: ['settings'] });
+      }
+    } catch (e: any) {
+      toast(e.message || 'خطا در ارسال بک‌آپ به تلگرام', 'error');
+    } finally {
+      setSendingTelegramNow(false);
+    }
+  };
+
   const changePassword = useMutation({
     mutationFn: () => {
       if (pwForm.next !== pwForm.confirm) throw new Error('رمز جدید با تکرار آن یکسان نیست.');
@@ -113,7 +161,7 @@ export default function SettingsPage() {
 
   const exportBackup = async () => {
     try {
-      const res = await fetch('/api/backup/export?includeAdmins=false', { credentials: 'include' });
+      const res = await fetch('/api/backup/export?includeAdmins=true', { credentials: 'include' });
       if (!res.ok) throw new Error('خطا در خروجی پشتیبان');
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -315,42 +363,207 @@ export default function SettingsPage() {
       )}
 
       {activeTab === 'backup' && (
-        <div className="grid gap-6 md:grid-cols-2 max-w-4xl">
-          <GlassCard className="space-y-4">
-            <div className="flex items-center gap-2 text-cyan-400">
-              <Download size={22} />
-              <h3 className="text-lg font-bold">خروجی پشتیبان (Export)</h3>
+        <div className="space-y-6 max-w-4xl">
+          {/* Telegram Automated Backup Card */}
+          <GlassCard className="space-y-5 border border-sky-500/20 bg-gradient-to-br from-sky-950/20 via-slate-900/60 to-slate-950/80">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-sky-500/10 p-2.5 text-sky-400 border border-sky-500/20">
+                  <Send size={22} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    ارسال خودکار بک‌آپ به تلگرام
+                    <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[11px] font-semibold text-sky-300">
+                      Cloud Backup
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    ارسال خودکار فایل پشتیبان کامل (کاربران، پسوردها، سوابق مصرف و تنظیمات) به ربات یا کانال تلگرام
+                  </p>
+                </div>
+              </div>
+
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  className="peer sr-only"
+                  checked={telegramForm.enabled}
+                  onChange={(e) => setTelegramForm({ ...telegramForm, enabled: e.target.checked })}
+                />
+                <div className="peer h-6 w-11 rounded-full bg-slate-800 border border-slate-700 after:absolute after:top-[2px] after:right-[2px] after:h-5 after:w-5 after:rounded-full after:bg-slate-400 after:transition-all after:content-[''] peer-checked:bg-sky-600 peer-checked:border-sky-500 peer-checked:after:-translate-x-full peer-checked:after:bg-white"></div>
+                <span className="mr-2 text-xs font-medium text-slate-300">
+                  {telegramForm.enabled ? 'فعال' : 'غیرفعال'}
+                </span>
+              </label>
             </div>
-            <p className="text-xs text-muted">
-              تهیه فایل پشتیبان JSON از تمام کاربران، توکن‌های دانلود، ترافیک‌های مصرفی و تنظیمات پنل.
-            </p>
-            <button className="btn-primary w-full" onClick={exportBackup}>
-              دانلود فایل پشتیبان (JSON)
-            </button>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                updateTelegram.mutate();
+              }}
+              className="space-y-4 pt-2"
+            >
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
+                    <Bot size={14} className="text-sky-400" />
+                    توکن ربات تلگرام (Bot Token)
+                  </span>
+                  <input
+                    className="input mt-1 font-mono text-xs"
+                    type="password"
+                    placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ..."
+                    value={telegramForm.botToken}
+                    onChange={(e) => setTelegramForm({ ...telegramForm, botToken: e.target.value })}
+                    dir="ltr"
+                  />
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">از @BotFather دریافت کنید</span>
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
+                    <Send size={14} className="text-sky-400" />
+                    شناسه چت یا کانال (Chat ID / Channel)
+                  </span>
+                  <input
+                    className="input mt-1 font-mono text-xs"
+                    placeholder="123456789 یا @MyBackupChannel"
+                    value={telegramForm.chatId}
+                    onChange={(e) => setTelegramForm({ ...telegramForm, chatId: e.target.value })}
+                    dir="ltr"
+                  />
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">ربات باید در کانال شما ادمین باشد</span>
+                </label>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 items-center">
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-300">بازه زمانی ارسال خودکار</span>
+                  <select
+                    className="input mt-1"
+                    value={telegramForm.intervalHours}
+                    onChange={(e) => setTelegramForm({ ...telegramForm, intervalHours: Number(e.target.value) })}
+                  >
+                    <option value={1}>هر ۱ ساعت (پیشنهادی)</option>
+                    <option value={3}>هر ۳ ساعت</option>
+                    <option value={6}>هر ۶ ساعت</option>
+                    <option value={12}>هر ۱۲ ساعت</option>
+                    <option value={24}>هر ۲۴ ساعت (یکبار در روز)</option>
+                  </select>
+                </label>
+
+                <label className="flex items-center gap-2 pt-5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded border-slate-700 bg-slate-800 text-sky-500 focus:ring-sky-500"
+                    checked={telegramForm.includeAdmins}
+                    onChange={(e) => setTelegramForm({ ...telegramForm, includeAdmins: e.target.checked })}
+                  />
+                  <span className="text-xs text-slate-300">شامل حساب‌های مدیران پنل (Full Backup)</span>
+                </label>
+              </div>
+
+              {/* Status Box */}
+              {data?.settings?.telegram?.lastBackupAt && (
+                <div className="rounded-xl border border-slate-800 bg-black/40 p-3 text-xs flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {data.settings.telegram.lastStatus === 'success' ? (
+                      <CheckCircle2 size={16} className="text-emerald-400" />
+                    ) : (
+                      <AlertTriangle size={16} className="text-rose-400" />
+                    )}
+                    <span className="text-slate-300">
+                      آخرین وضعیت ارسال:
+                      <span className={data.settings.telegram.lastStatus === 'success' ? 'text-emerald-400 mr-1 font-bold' : 'text-rose-400 mr-1 font-bold'}>
+                        {data.settings.telegram.lastStatus === 'success' ? 'موفق' : 'ناموفق'}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="text-slate-400 font-mono text-[11px]" dir="ltr">
+                    {new Date(data.settings.telegram.lastBackupAt).toLocaleString('fa-IR')}
+                  </div>
+                  {data.settings.telegram.lastError && (
+                    <div className="w-full text-rose-400 text-[11px] font-mono mt-1" dir="ltr">
+                      {data.settings.telegram.lastError}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn-ghost text-xs"
+                    onClick={testTelegram}
+                    disabled={testingTelegram}
+                  >
+                    {testingTelegram ? <RefreshCw size={14} className="animate-spin" /> : <Bot size={14} />}
+                    تست اتصال
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn-ghost text-xs text-sky-300 hover:text-sky-200 border-sky-500/30"
+                    onClick={sendBackupNow}
+                    disabled={sendingTelegramNow || !telegramForm.botToken || !telegramForm.chatId}
+                  >
+                    {sendingTelegramNow ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+                    ارسال فوری بک‌آپ به تلگرام
+                  </button>
+                </div>
+
+                <button
+                  className="btn-primary"
+                  type="submit"
+                  disabled={updateTelegram.isPending}
+                >
+                  {updateTelegram.isPending ? 'در حال ذخیره...' : 'ذخیره تنظیمات تلگرام'}
+                </button>
+              </div>
+            </form>
           </GlassCard>
 
-          <GlassCard className="space-y-4">
-            <div className="flex items-center gap-2 text-indigo-400">
-              <Upload size={22} />
-              <h3 className="text-lg font-bold">بازیابی پشتیبان (Import)</h3>
-            </div>
-            <p className="text-xs text-muted">
-              بازیابی اطلاعات از فایل پشتیبان قبلی بدون قطعی یا تغییر در آدرس سرور فعلی.
-            </p>
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept=".json,application/json"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-            <button
-              className="btn-ghost w-full justify-center text-slate-200 hover:border-indigo-400"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              انتخاب فایل پشتیبان و بازیابی...
-            </button>
-          </GlassCard>
+          {/* Manual Export & Import */}
+          <div className="grid gap-6 md:grid-cols-2">
+            <GlassCard className="space-y-4">
+              <div className="flex items-center gap-2 text-cyan-400">
+                <Download size={22} />
+                <h3 className="text-lg font-bold">خروجی و دانلود پشتیبان (Export)</h3>
+              </div>
+              <p className="text-xs text-muted">
+                تهیه فایل پشتیبان JSON کامل و قابل انتقال روی هر سرور جدید شامل تمام کاربران، پسوردها، ترافیک‌ها و گواهی‌ها.
+              </p>
+              <button className="btn-primary w-full" onClick={exportBackup}>
+                دانلود فایل پشتیبان (JSON)
+              </button>
+            </GlassCard>
+
+            <GlassCard className="space-y-4">
+              <div className="flex items-center gap-2 text-indigo-400">
+                <Upload size={22} />
+                <h3 className="text-lg font-bold">بازیابی پشتیبان (Import)</h3>
+              </div>
+              <p className="text-xs text-muted">
+                بازیابی اطلاعات از فایل پشتیبان قبلی با رمزنگاری مجدد خودکار برای سرور جدید.
+              </p>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept=".json,application/json"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <button
+                className="btn-ghost w-full justify-center text-slate-200 hover:border-indigo-400"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                انتخاب فایل پشتیبان و بازیابی...
+              </button>
+            </GlassCard>
+          </div>
         </div>
       )}
 
