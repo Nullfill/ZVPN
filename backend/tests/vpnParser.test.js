@@ -56,3 +56,22 @@ list-sa event { uniqueid = nope remote-id = alice }
 list-sa event { uniqueid = 1 }
 `), []);
 });
+
+test('parseSas prefers remote-eap-id over remote-id when client sends LAN IP as IDi', () => {
+  const raw = `list-sa event {
+    ikev2-vpn {
+      uniqueid = 30
+      remote-id = 192.168.1.85
+      remote-eap-id = "hamednew"
+      remote-host = 5.121.228.87
+      remote-port = 4500
+      established = 2400
+      remote-vips = [10.20.0.10]
+      child { bytes-in = 1000 bytes-out = 2000 }
+    }
+  }`;
+  const parsed = parseSas(raw);
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].remoteId, 'hamednew');
+  assert.equal(parsed[0].ikeId, '30');
+});

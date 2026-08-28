@@ -28,9 +28,11 @@ export function parseSas(raw) {
     .map((block) => {
       const bytesIn = sumMatches(block, /\bbytes-in\s*=\s*(\d+)/g);
       const bytesOut = sumMatches(block, /\bbytes-out\s*=\s*(\d+)/g);
+      const eapId = rawValue(block, 'remote-eap-id');
+      const remoteId = rawValue(block, 'remote-id');
       return {
         ikeId: rawValue(block, 'uniqueid'),
-        remoteId: rawValue(block, 'remote-id'),
+        remoteId: eapId || remoteId,
         remoteHost: rawValue(block, 'remote-host'),
         remotePort: rawValue(block, 'remote-port'),
         // This is SA age in seconds, not an epoch timestamp. Lower is newer.
