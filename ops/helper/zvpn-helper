@@ -160,14 +160,14 @@ case "$ACTION" in
       }
       { print }
       END { if (!changed) exit 4 }
-    ' "$BAK" > "${IPSEC_CONF}.tmp.$$"
-    install -o root -g root -m 600 "${IPSEC_CONF}.tmp.$$" "$IPSEC_CONF"
-    rm -f "${IPSEC_CONF}.tmp.$$" "$BAK"
+    ' "$BAK" > "${RUNTIME_DIR}/ipsec.conf.tmp.$$"
+    install -o root -g root -m 600 "${RUNTIME_DIR}/ipsec.conf.tmp.$$" "$IPSEC_CONF"
+    rm -f "${RUNTIME_DIR}/ipsec.conf.tmp.$$" "$BAK"
     echo "leftid=${ID}"
     ;;
   normalize-conn)
     [[ -f "$IPSEC_CONF" && ! -L "$IPSEC_CONF" ]] || { echo "ipsec.conf missing" >&2; exit 3; }
-    TMP="${IPSEC_CONF}.tmp.$$"
+    TMP="${RUNTIME_DIR}/ipsec.conf.tmp.$$"
     awk '
       BEGIN { setup=0; setup_seen=0; target=0; target_seen=0 }
       /^[[:space:]]*config[[:space:]]+setup[[:space:]]*$/ { setup=1; setup_seen=1; print; next }
