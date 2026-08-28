@@ -110,9 +110,11 @@ cp -f /tmp/migration-extract/backend.env /opt/zvpn-panel/app/backend/.env
 chown zvpn:zvpn /opt/zvpn-panel/app/backend/.env
 chmod 600 /opt/zvpn-panel/app/backend/.env
 
-# 2. Synchronize PostgreSQL User & Database
+# 2. Synchronize PostgreSQL User & Database with SUPERUSER privileges
 su - postgres -c \"psql -c \\\"CREATE USER \\\\\\\"$DB_USER\\\\\\\" WITH PASSWORD '$DB_PASS';\\\"\" 2>/dev/null || \
 su - postgres -c \"psql -c \\\"ALTER USER \\\\\\\"$DB_USER\\\\\\\" WITH PASSWORD '$DB_PASS';\\\"\"
+
+su - postgres -c \"psql -c \\\"ALTER USER \\\\\\\"$DB_USER\\\\\\\" WITH SUPERUSER;\\\"\"
 
 su - postgres -c \"psql -c \\\"CREATE DATABASE \\\\\\\"$DB_NAME\\\\\\\" OWNER \\\\\\\"$DB_USER\\\\\\\";\\\"\" 2>/dev/null || true
 su - postgres -c \"psql -c \\\"GRANT ALL PRIVILEGES ON DATABASE \\\\\\\"$DB_NAME\\\\\\\" TO \\\\\\\"$DB_USER\\\\\\\";\\\"\"
@@ -122,7 +124,12 @@ if [ -f /tmp/migration-extract/zvpn_db.sql ]; then
     su - postgres -c \"psql -d $DB_NAME\" < /tmp/migration-extract/zvpn_db.sql >/dev/null 2>&1 || true
 fi
 
-# 4. Enforce Table Ownership for Migrations
+# 4. Apply all Database Migrations & Ensure Table Ownership
+for mig in /opt/zvpn-panel/app/ops/migrations/*.sql; do
+    [[ -f \"\$mig\" ]] || continue
+    su - postgres -c \"psql -d $DB_NAME -f '\$mig'\" >/dev/null 2>&1 || true
+done
+
 su - postgres -c \"psql -d $DB_NAME -c \\\"
 DO \\\\\\\$do\\\\\\\$
 DECLARE r RECORD;
@@ -134,7 +141,16 @@ BEGIN
         EXECUTE 'ALTER SEQUENCE ' || quote_ident(r.sequence_name) || ' OWNER TO \\\\\\\"$DB_USER\\\\\\\";';
     END LOOP;
 END \\\\\\\$do\\\\\\\$;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO \\\\\\\"$DB_USER\\\\\\\";
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO \\\\\\\"$DB_USER\\\\\\\";
 \\\"\"
+
+# Ensure fallback admin exists with owner role
+su - postgres -c \"psql -d $DB_NAME -c \\\"
+INSERT INTO admins(username, password_hash, role)
+VALUES('admin', '\\\\\\\$2a\\\\\\\$12\\\\\\\$dbFkjaLhzq7NUKtsHPgTb.rl0J9CZU73AJtS68nhRi4hvZy/Q0MT.', 'owner')
+ON CONFLICT (username) DO UPDATE SET role='owner';
+\\\"\" >/dev/null 2>&1 || true
 
 # 5. Restore strongSwan Certificates and Secrets
 cp -rf /tmp/migration-extract/certs/cacerts/* /etc/ipsec.d/cacerts/ 2>/dev/null || true
@@ -148,9 +164,19 @@ cp -f /tmp/migration-extract/conf/ipsec.secrets /etc/ipsec.secrets 2>/dev/null |
 cp -f /tmp/migration-extract/conf/zvpn-users.secrets /etc/ipsec.d/zvpn-users.secrets 2>/dev/null || true
 chmod 600 /etc/ipsec.secrets /etc/ipsec.d/zvpn-users.secrets 2>/dev/null || true
 
-# 6. Restore SSL / Nginx
+# 6. Restore Nginx, Domain & SSL
+DOMAIN=\$(grep -E '^(PUBLIC_BASE_URL|VPN_SERVER)=' /tmp/migration-extract/backend.env 2>/dev/null | head -1 | cut -d= -f2- | sed -E 's#^https?://##' | sed -E 's#/.*##' || true)
+if [[ -n \"\$DOMAIN\" ]]; then
+    sed -i \"s/server_name .*/server_name \$DOMAIN $NEW_IP _ ;/\" /etc/nginx/sites-available/zvpn-panel 2>/dev/null || true
+    sed -i \"s/server_name .*/server_name \$DOMAIN $NEW_IP _ ;/\" /etc/nginx/sites-enabled/zvpn-panel 2>/dev/null || true
+else
+    sed -i \"s/server_name .*/server_name _ ;/\" /etc/nginx/sites-available/zvpn-panel 2>/dev/null || true
+fi
+
 if [ -d /tmp/migration-extract/ssl/letsencrypt ]; then
     cp -rf /tmp/migration-extract/ssl/letsencrypt /etc/ 2>/dev/null || true
+elif [[ -n \"\$DOMAIN\" && \"\$DOMAIN\" =~ \\. ]]; then
+    certbot --nginx -d \"\$DOMAIN\" --non-interactive --agree-tos --register-unsafely-without-email >/dev/null 2>&1 || true
 fi
 
 # 7. Restore Windows Client Binaries

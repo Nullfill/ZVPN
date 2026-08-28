@@ -97,6 +97,7 @@ if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'
 else
   sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER \"$DB_USER\" WITH PASSWORD '$DB_PASSWORD';" >/dev/null
 fi
+sudo -u postgres psql -c "ALTER USER \"$DB_USER\" WITH SUPERUSER;" >/dev/null 2>&1 || true
 
 sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" 2>/dev/null | grep -q 1 || sudo -u postgres createdb -O "$DB_USER" "$DB_NAME"
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE \"$DB_NAME\" TO \"$DB_USER\";" >/dev/null 2>&1 || true
