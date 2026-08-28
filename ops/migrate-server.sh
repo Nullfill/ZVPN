@@ -24,18 +24,25 @@ echo " 3. Panel Encryption Keys (.env)"
 echo " 4. StrongSwan IPsec configurations and secrets"
 echo ""
 
-read -rp "Enter NEW Server IP address: " NEW_IP
+NEW_IP="${1:-}"
+NEW_PORT="${2:-}"
+
+if [[ -z "$NEW_IP" ]]; then
+    read -rp "Enter NEW Server IP address: " NEW_IP < /dev/tty
+fi
 [[ -n "$NEW_IP" ]] || die "New server IP cannot be empty."
 
-read -rp "Enter NEW Server SSH Port [default 22]: " NEW_PORT
-NEW_PORT="${NEW_PORT:-22}"
+if [[ -z "$NEW_PORT" ]]; then
+    read -rp "Enter NEW Server SSH Port [default 22]: " NEW_PORT < /dev/tty
+    NEW_PORT="${NEW_PORT:-22}"
+fi
 
 which sshpass >/dev/null 2>&1 || {
     info "Installing sshpass for automated transfer..."
     apt-get update -qq && apt-get install -y -qq sshpass
 }
 
-read -rsp "Enter NEW Server Root SSH Password: " SSH_PASS
+read -rsp "Enter NEW Server Root SSH Password: " SSH_PASS < /dev/tty
 echo ""
 
 SSH_CMD="sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -p $NEW_PORT root@$NEW_IP"
