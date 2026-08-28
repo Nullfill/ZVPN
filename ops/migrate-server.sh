@@ -53,10 +53,10 @@ eval "$SSH_CMD 'echo SSH_OK'" >/dev/null 2>&1 || die "Failed to connect to new s
 ok "SSH connection verified!"
 
 info "Checking if ZVPN is installed on new server..."
-HAS_PANEL=$(eval "$SSH_CMD '[ -d /opt/zvpn-panel/app ] && echo 1 || echo 0'")
+HAS_PANEL=$(eval "$SSH_CMD '[ -f /opt/zvpn-panel/app/backend/src/server.js ] && echo 1 || echo 0'")
 if [[ "$HAS_PANEL" != "1" ]]; then
     warn "ZVPN is not installed on new server. Installing fresh panel first..."
-    eval "$SSH_CMD 'curl -sSL https://raw.githubusercontent.com/Nullfill/ZVPN/main/install.sh | bash -s -- --non-interactive'"
+    eval "$SSH_CMD 'which git >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq git; }; rm -rf /tmp/zvpn-release && git clone https://github.com/Nullfill/ZVPN.git /tmp/zvpn-release && cd /tmp/zvpn-release && bash install.sh --non-interactive'"
     ok "Panel installed on new server."
 fi
 

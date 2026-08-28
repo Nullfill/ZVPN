@@ -6,7 +6,7 @@
 set -Eeuo pipefail
 
 [[ $EUID -eq 0 ]] || { echo 'Run as root: sudo ./install.sh'; exit 1; }
-SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || pwd)"
 ROOT=/opt/zvpn-panel
 APP="$ROOT/app"
 ENV_FILE="$APP/backend/.env"
@@ -104,6 +104,13 @@ sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE \"$DB_NAME\" TO \"$DB
 # 7. Sync Source Files
 log "Deploying application files to $APP..."
 mkdir -p "$APP"
+if [[ ! -f "$SOURCE_DIR/ops/helper/zvpn-helper" ]]; then
+  log "Cloning ZVPN source repository..."
+  rm -rf /tmp/zvpn-clone
+  git clone --depth 1 https://github.com/Nullfill/ZVPN.git /tmp/zvpn-clone
+  SOURCE_DIR="/tmp/zvpn-clone"
+fi
+
 rsync -a \
   --exclude 'backend/.env' \
   --exclude 'backend/node_modules' \
