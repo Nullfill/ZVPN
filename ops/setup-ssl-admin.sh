@@ -14,6 +14,7 @@ echo "[2/3] Activating SSL (HTTPS) for $DOMAIN..."
 certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email || true
 
 echo "[3/3] Setting Admin Password..."
+sudo -u postgres psql -d zvpn -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO zvpn; GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO zvpn; ALTER TABLE admins OWNER TO zvpn;" 2>/dev/null || true
 cd /opt/zvpn-panel/app/backend
 node scripts/create-admin.js admin "$ADMIN_PASS"
 
