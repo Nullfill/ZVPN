@@ -98,8 +98,6 @@ cat << 'REMOTE_RESTORE_EOF' > "$TEMP_DIR/remote_restore.sh"
 set -e
 
 EXTRACT_DIR="/tmp/migration-extract"
-mkdir -p "$EXTRACT_DIR"
-tar -xzf /tmp/migration.tar.gz -C "$EXTRACT_DIR"
 
 # 1. Restore .env
 cp -f "$EXTRACT_DIR/backend.env" /opt/zvpn-panel/app/backend/.env
@@ -205,7 +203,7 @@ eval "$SCP_CMD '$TEMP_ARCHIVE' root@$NEW_IP:/tmp/migration.tar.gz"
 rm -f "$TEMP_ARCHIVE"
 ok "Data transferred to new server."
 
-eval "$SSH_CMD 'tar -xzf /tmp/migration.tar.gz -C /tmp/ remote_restore.sh && bash /tmp/remote_restore.sh'"
+eval "$SSH_CMD 'rm -rf /tmp/migration-extract && mkdir -p /tmp/migration-extract && tar -xzf /tmp/migration.tar.gz -C /tmp/migration-extract && bash /tmp/migration-extract/remote_restore.sh'"
 ok "Database, CA certificates, SSL, and secrets successfully restored on new server!"
 
 # Clean local temp
