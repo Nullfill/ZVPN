@@ -193,8 +193,9 @@ cp -f "$EXTRACT_DIR/public"/* /opt/zvpn-panel/backend/public/ 2>/dev/null || tru
 # 8. Clean temporary files
 rm -rf /tmp/migration.tar.gz "$EXTRACT_DIR" /tmp/remote_restore.sh
 
-# 9. Apply Speed Optimizations
+# 9. Apply Speed & Instagram Optimizations
 [ -f /opt/zvpn-panel/app/ops/optimize-speed.sh ] && bash /opt/zvpn-panel/app/ops/optimize-speed.sh || true
+[ -f /opt/zvpn-panel/app/ops/optimize-instagram.sh ] && bash /opt/zvpn-panel/app/ops/optimize-instagram.sh || true
 
 # 10. Restart and enable services
 systemctl restart postgresql zvpn-panel strongswan-starter nginx
