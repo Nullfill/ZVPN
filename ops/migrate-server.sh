@@ -92,111 +92,120 @@ cp -f /etc/ipsec.d/zvpn-users.secrets "$TEMP_DIR/conf/zvpn-users.secrets" 2>/dev
 cp -rf /etc/letsencrypt "$TEMP_DIR/ssl/" 2>/dev/null || true
 cp -f /opt/zvpn-panel/backend/public/ZVPN-Windows-Client.exe "$TEMP_DIR/public/" 2>/dev/null || true
 cp -f /opt/zvpn-panel/app/backend/public/ZVPN-Windows-Client.exe "$TEMP_DIR/public/" 2>/dev/null || true
-ok "Security artifacts, database, and keys collected."
-
-info "3/5 Transferring data to new server..."
-TEMP_ARCHIVE="/tmp/zvpn-migration-$$.tar.gz"
-tar -czf "$TEMP_ARCHIVE" -C "$TEMP_DIR" .
-eval "$SCP_CMD '$TEMP_ARCHIVE' root@$NEW_IP:/tmp/migration.tar.gz"
-rm -f "$TEMP_ARCHIVE"
-ok "Data transferred to new server."
-
-info "4/5 Restoring Database, Keys and Certificates on new server..."
-REMOTE_RESTORE="
+info "3/5 Creating self-contained restore script..."
+cat << 'REMOTE_RESTORE_EOF' > "$TEMP_DIR/remote_restore.sh"
+#!/bin/bash
 set -e
-mkdir -p /tmp/migration-extract
-tar -xzf /tmp/migration.tar.gz -C /tmp/migration-extract/
+
+EXTRACT_DIR="/tmp/migration-extract"
+mkdir -p "$EXTRACT_DIR"
+tar -xzf /tmp/migration.tar.gz -C "$EXTRACT_DIR"
 
 # 1. Restore .env
-cp -f /tmp/migration-extract/backend.env /opt/zvpn-panel/app/backend/.env
+cp -f "$EXTRACT_DIR/backend.env" /opt/zvpn-panel/app/backend/.env
 chown zvpn:zvpn /opt/zvpn-panel/app/backend/.env
 chmod 600 /opt/zvpn-panel/app/backend/.env
 
+# Parse Database credentials from .env
+DB_URL=$(grep '^DATABASE_URL=' /opt/zvpn-panel/app/backend/.env | cut -d= -f2-)
+DB_NAME=$(echo "$DB_URL" | sed -E 's/.*\/([^?]+).*/\1/')
+DB_USER=$(echo "$DB_URL" | sed -E 's/.*:\/\/([^:]+):.*/\1/')
+DB_PASS=$(echo "$DB_URL" | sed -E 's/.*:([^@]+)@.*/\1/')
+
 # 2. Synchronize PostgreSQL User & Database with SUPERUSER privileges
-su - postgres -c \"psql -c \\\"CREATE USER \\\\\\\"$DB_USER\\\\\\\" WITH PASSWORD '$DB_PASS';\\\"\" 2>/dev/null || \
-su - postgres -c \"psql -c \\\"ALTER USER \\\\\\\"$DB_USER\\\\\\\" WITH PASSWORD '$DB_PASS';\\\"\"
+su - postgres -c "psql -c \"CREATE USER \\\"$DB_USER\\\" WITH PASSWORD '$DB_PASS';\"" 2>/dev/null || \
+su - postgres -c "psql -c \"ALTER USER \\\"$DB_USER\\\" WITH PASSWORD '$DB_PASS';\""
 
-su - postgres -c \"psql -c \\\"ALTER USER \\\\\\\"$DB_USER\\\\\\\" WITH SUPERUSER;\\\"\"
+su - postgres -c "psql -c \"ALTER USER \\\"$DB_USER\\\" WITH SUPERUSER;\""
 
-su - postgres -c \"psql -c \\\"CREATE DATABASE \\\\\\\"$DB_NAME\\\\\\\" OWNER \\\\\\\"$DB_USER\\\\\\\";\\\"\" 2>/dev/null || true
-su - postgres -c \"psql -c \\\"GRANT ALL PRIVILEGES ON DATABASE \\\\\\\"$DB_NAME\\\\\\\" TO \\\\\\\"$DB_USER\\\\\\\";\\\"\"
+su - postgres -c "psql -c \"CREATE DATABASE \\\"$DB_NAME\\\" OWNER \\\"$DB_USER\\\";\"" 2>/dev/null || true
+su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE \\\"$DB_NAME\\\" TO \\\"$DB_USER\\\";\""
 
 # 3. Restore Database Schema & Records
-if [ -f /tmp/migration-extract/zvpn_db.sql ]; then
-    su - postgres -c \"psql -d $DB_NAME\" < /tmp/migration-extract/zvpn_db.sql >/dev/null 2>&1 || true
+if [ -f "$EXTRACT_DIR/zvpn_db.sql" ]; then
+    su - postgres -c "psql -d $DB_NAME" < "$EXTRACT_DIR/zvpn_db.sql" >/dev/null 2>&1 || true
 fi
 
 # 4. Apply all Database Migrations & Ensure Table Ownership
 for mig in /opt/zvpn-panel/app/ops/migrations/*.sql; do
-    [[ -f \"\$mig\" ]] || continue
-    su - postgres -c \"psql -d $DB_NAME -f '\$mig'\" >/dev/null 2>&1 || true
+    [[ -f "$mig" ]] || continue
+    su - postgres -c "psql -d $DB_NAME -f '$mig'" >/dev/null 2>&1 || true
 done
 
-su - postgres -c \"psql -d $DB_NAME -c \\\"
-DO \\\\\\\$do\\\\\\\$
+su - postgres -c "psql -d $DB_NAME -c \"
+DO \\\$do\\\$
 DECLARE r RECORD;
 BEGIN
     FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
-        EXECUTE 'ALTER TABLE ' || quote_ident(r.tablename) || ' OWNER TO \\\\\\\"$DB_USER\\\\\\\";';
+        EXECUTE 'ALTER TABLE ' || quote_ident(r.tablename) || ' OWNER TO \\\"$DB_USER\\\";';
     END LOOP;
     FOR r IN (SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public') LOOP
-        EXECUTE 'ALTER SEQUENCE ' || quote_ident(r.sequence_name) || ' OWNER TO \\\\\\\"$DB_USER\\\\\\\";';
+        EXECUTE 'ALTER SEQUENCE ' || quote_ident(r.sequence_name) || ' OWNER TO \\\"$DB_USER\\\";';
     END LOOP;
-END \\\\\\\$do\\\\\\\$;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO \\\\\\\"$DB_USER\\\\\\\";
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO \\\\\\\"$DB_USER\\\\\\\";
-\\\"\"
+END \\\$do\\\$;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO \\\"$DB_USER\\\";
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO \\\"$DB_USER\\\";
+\""
 
 # Ensure fallback admin exists with owner role
-su - postgres -c \"psql -d $DB_NAME -c \\\"
+su - postgres -c "psql -d $DB_NAME -c \"
 INSERT INTO admins(username, password_hash, role)
-VALUES('admin', '\\\\\\\$2a\\\\\\\$12\\\\\\\$dbFkjaLhzq7NUKtsHPgTb.rl0J9CZU73AJtS68nhRi4hvZy/Q0MT.', 'owner')
+VALUES('admin', '\\\$2a\\\$12\\\$dbFkjaLhzq7NUKtsHPgTb.rl0J9CZU73AJtS68nhRi4hvZy/Q0MT.', 'owner')
 ON CONFLICT (username) DO UPDATE SET role='owner';
-\\\"\" >/dev/null 2>&1 || true
+\"" >/dev/null 2>&1 || true
 
 # 5. Restore strongSwan Certificates and Secrets
-cp -rf /tmp/migration-extract/certs/cacerts/* /etc/ipsec.d/cacerts/ 2>/dev/null || true
-cp -rf /tmp/migration-extract/certs/certs/* /etc/ipsec.d/certs/ 2>/dev/null || true
-cp -rf /tmp/migration-extract/certs/private/* /etc/ipsec.d/private/ 2>/dev/null || true
+cp -rf "$EXTRACT_DIR/certs/cacerts"/* /etc/ipsec.d/cacerts/ 2>/dev/null || true
+cp -rf "$EXTRACT_DIR/certs/certs"/* /etc/ipsec.d/certs/ 2>/dev/null || true
+cp -rf "$EXTRACT_DIR/certs/private"/* /etc/ipsec.d/private/ 2>/dev/null || true
 chmod 600 /etc/ipsec.d/private/* 2>/dev/null || true
 chmod 644 /etc/ipsec.d/cacerts/* /etc/ipsec.d/certs/* 2>/dev/null || true
 
-cp -f /tmp/migration-extract/conf/ipsec.conf /etc/ipsec.conf 2>/dev/null || true
-cp -f /tmp/migration-extract/conf/ipsec.secrets /etc/ipsec.secrets 2>/dev/null || true
-cp -f /tmp/migration-extract/conf/zvpn-users.secrets /etc/ipsec.d/zvpn-users.secrets 2>/dev/null || true
+cp -f "$EXTRACT_DIR/conf/ipsec.conf" /etc/ipsec.conf 2>/dev/null || true
+cp -f "$EXTRACT_DIR/conf/ipsec.secrets" /etc/ipsec.secrets 2>/dev/null || true
+cp -f "$EXTRACT_DIR/conf/zvpn-users.secrets" /etc/ipsec.d/zvpn-users.secrets 2>/dev/null || true
 chmod 600 /etc/ipsec.secrets /etc/ipsec.d/zvpn-users.secrets 2>/dev/null || true
 
 # 6. Restore Nginx, Domain & SSL
-DOMAIN=\$(grep -E '^(PUBLIC_BASE_URL|VPN_SERVER)=' /tmp/migration-extract/backend.env 2>/dev/null | head -1 | cut -d= -f2- | sed -E 's#^https?://##' | sed -E 's#/.*##' || true)
-if [[ -n \"\$DOMAIN\" ]]; then
-    sed -i \"s/server_name .*/server_name \$DOMAIN $NEW_IP _ ;/\" /etc/nginx/sites-available/zvpn-panel 2>/dev/null || true
-    sed -i \"s/server_name .*/server_name \$DOMAIN $NEW_IP _ ;/\" /etc/nginx/sites-enabled/zvpn-panel 2>/dev/null || true
+DOMAIN=$(grep -E '^(PUBLIC_BASE_URL|VPN_SERVER)=' "$EXTRACT_DIR/backend.env" 2>/dev/null | head -1 | cut -d= -f2- | sed -E 's#^https?://##' | sed -E 's#/.*##' || true)
+if [[ -n "$DOMAIN" ]]; then
+    sed -i "s/server_name .*/server_name $DOMAIN _ ;/" /etc/nginx/sites-available/zvpn-panel 2>/dev/null || true
+    sed -i "s/server_name .*/server_name $DOMAIN _ ;/" /etc/nginx/sites-enabled/zvpn-panel 2>/dev/null || true
 else
-    sed -i \"s/server_name .*/server_name _ ;/\" /etc/nginx/sites-available/zvpn-panel 2>/dev/null || true
+    sed -i "s/server_name .*/server_name _ ;/" /etc/nginx/sites-available/zvpn-panel 2>/dev/null || true
 fi
 
-if [ -d /tmp/migration-extract/ssl/letsencrypt ]; then
-    cp -rf /tmp/migration-extract/ssl/letsencrypt /etc/ 2>/dev/null || true
-elif [[ -n \"\$DOMAIN\" && \"\$DOMAIN\" =~ \\. ]]; then
-    certbot --nginx -d \"\$DOMAIN\" --non-interactive --agree-tos --register-unsafely-without-email >/dev/null 2>&1 || true
+if [ -d "$EXTRACT_DIR/ssl/letsencrypt" ]; then
+    cp -rf "$EXTRACT_DIR/ssl/letsencrypt" /etc/ 2>/dev/null || true
+elif [[ -n "$DOMAIN" && "$DOMAIN" =~ \. ]]; then
+    certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email >/dev/null 2>&1 || true
 fi
 
 # 7. Restore Windows Client Binaries
 mkdir -p /opt/zvpn-panel/app/backend/public /opt/zvpn-panel/backend/public
-cp -f /tmp/migration-extract/public/* /opt/zvpn-panel/app/backend/public/ 2>/dev/null || true
-cp -f /tmp/migration-extract/public/* /opt/zvpn-panel/backend/public/ 2>/dev/null || true
+cp -f "$EXTRACT_DIR/public"/* /opt/zvpn-panel/app/backend/public/ 2>/dev/null || true
+cp -f "$EXTRACT_DIR/public"/* /opt/zvpn-panel/backend/public/ 2>/dev/null || true
 
 # 8. Clean temporary files
-rm -rf /tmp/migration.tar.gz /tmp/migration-extract
+rm -rf /tmp/migration.tar.gz "$EXTRACT_DIR" /tmp/remote_restore.sh
 
 # 9. Apply Speed Optimizations
 [ -f /opt/zvpn-panel/app/ops/optimize-speed.sh ] && bash /opt/zvpn-panel/app/ops/optimize-speed.sh || true
 
 # 10. Restart and enable services
 systemctl restart postgresql zvpn-panel strongswan-starter nginx
-"
+REMOTE_RESTORE_EOF
 
-eval "$SSH_CMD \"$REMOTE_RESTORE\""
+chmod +x "$TEMP_DIR/remote_restore.sh"
+
+info "4/5 Transferring and executing restore on new server..."
+TEMP_ARCHIVE="/tmp/zvpn-migration-$$.tar.gz"
+tar -czf "$TEMP_ARCHIVE" -C "$TEMP_DIR" .
+eval "$SCP_CMD '$TEMP_ARCHIVE' root@$NEW_IP:/tmp/migration.tar.gz"
+rm -f "$TEMP_ARCHIVE"
+ok "Data transferred to new server."
+
+eval "$SSH_CMD 'tar -xzf /tmp/migration.tar.gz -C /tmp/ remote_restore.sh && bash /tmp/remote_restore.sh'"
 ok "Database, CA certificates, SSL, and secrets successfully restored on new server!"
 
 # Clean local temp
