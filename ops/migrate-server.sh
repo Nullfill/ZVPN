@@ -92,6 +92,8 @@ cp -f /etc/ipsec.d/zvpn-users.secrets "$TEMP_DIR/conf/zvpn-users.secrets" 2>/dev
 cp -rf /etc/letsencrypt "$TEMP_DIR/ssl/" 2>/dev/null || true
 cp -f /opt/zvpn-panel/backend/public/ZVPN-Windows-Client.exe "$TEMP_DIR/public/" 2>/dev/null || true
 cp -f /opt/zvpn-panel/app/backend/public/ZVPN-Windows-Client.exe "$TEMP_DIR/public/" 2>/dev/null || true
+ok "Security artifacts, database, and keys collected."
+
 info "3/5 Creating self-contained restore script..."
 cat << 'REMOTE_RESTORE_EOF' > "$TEMP_DIR/remote_restore.sh"
 #!/bin/bash
@@ -175,6 +177,10 @@ fi
 
 if [ -d "$EXTRACT_DIR/ssl/letsencrypt" ]; then
     cp -rf "$EXTRACT_DIR/ssl/letsencrypt" /etc/ 2>/dev/null || true
+    # Re-apply Nginx SSL config after restoring certificates
+    if [[ -n "$DOMAIN" && "$DOMAIN" =~ \. ]]; then
+        certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email >/dev/null 2>&1 || true
+    fi
 elif [[ -n "$DOMAIN" && "$DOMAIN" =~ \. ]]; then
     certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email >/dev/null 2>&1 || true
 fi
