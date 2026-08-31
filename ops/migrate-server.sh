@@ -95,8 +95,10 @@ cp -f /opt/zvpn-panel/app/backend/public/ZVPN-Windows-Client.exe "$TEMP_DIR/publ
 ok "Security artifacts, database, and keys collected."
 
 info "3/5 Transferring data to new server..."
-tar -czf "$TEMP_DIR/migration.tar.gz" -C "$TEMP_DIR" .
-eval "$SCP_CMD '$TEMP_DIR/migration.tar.gz' root@$NEW_IP:/tmp/"
+TEMP_ARCHIVE="/tmp/zvpn-migration-$$.tar.gz"
+tar -czf "$TEMP_ARCHIVE" -C "$TEMP_DIR" .
+eval "$SCP_CMD '$TEMP_ARCHIVE' root@$NEW_IP:/tmp/migration.tar.gz"
+rm -f "$TEMP_ARCHIVE"
 ok "Data transferred to new server."
 
 info "4/5 Restoring Database, Keys and Certificates on new server..."

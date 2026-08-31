@@ -161,7 +161,8 @@ case "$ACTION" in
       { print }
       END { if (!changed) exit 4 }
     ' "$BAK" > "${RUNTIME_DIR}/ipsec.conf.tmp.$$"
-    install -o root -g root -m 600 "${RUNTIME_DIR}/ipsec.conf.tmp.$$" "$IPSEC_CONF"
+    cat "${RUNTIME_DIR}/ipsec.conf.tmp.$$" > "$IPSEC_CONF"
+    chmod 600 "$IPSEC_CONF"
     rm -f "${RUNTIME_DIR}/ipsec.conf.tmp.$$" "$BAK"
     echo "leftid=${ID}"
     ;;
@@ -198,7 +199,8 @@ case "$ACTION" in
       { print }
       END { if (setup && !setup_seen_unique) print "    uniqueids=never"; if (!target_seen) exit 4 }
     ' "$IPSEC_CONF" > "$TMP" || { rm -f "$TMP"; echo "conn ikev2-vpn missing" >&2; exit 3; }
-    install -o root -g root -m 600 "$TMP" "$IPSEC_CONF"
+    cat "$TMP" > "$IPSEC_CONF"
+    chmod 600 "$IPSEC_CONF"
     rm -f "$TMP"
     sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
     iptables -t nat -C POSTROUTING -s 10.0.0.0/8 -j MASQUERADE 2>/dev/null || \
