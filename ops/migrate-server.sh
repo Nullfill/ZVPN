@@ -222,8 +222,53 @@ echo -e "${G} [✓] MIGRATION COMPLETED 100% SUCCESSFULLY!                      
 echo -e "${G}========================================================================${N}"
 echo -e "Both servers now share the ${C}EXACT SAME Root CA and Cryptographic Keys${N}."
 echo ""
-echo -e "${Y}NEXT SIMPLE STEP:${N}"
-echo "Change the DNS A-Record of your VPN subdomain to point to: ${G}$NEW_IP${N}"
-echo "Once DNS updates, all existing users on Android, iOS and Windows will connect"
-echo "to the new server automatically without downloading any new profile!"
+
+# ── Step 5/5: Auto SSL — wait for DNS then run certbot on new server ─────────
+DOMAIN=$(grep -E '^(PUBLIC_BASE_URL|VPN_SERVER)=' /opt/zvpn-panel/app/backend/.env 2>/dev/null \
+    | head -1 | cut -d= -f2- | sed -E 's#^https?://##' | sed -E 's#/.*##' || true)
+
+if [[ -n "$DOMAIN" && "$DOMAIN" =~ \. ]]; then
+    echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+    echo -e "${Y} STEP 5/5 — Auto SSL Setup${N}"
+    echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+    echo ""
+    echo -e "  Domain detected: ${C}$DOMAIN${N}"
+    echo -e "  Now point the DNS A-Record of ${C}$DOMAIN${N} to: ${G}$NEW_IP${N}"
+    echo ""
+    echo -e "  ${Y}This terminal will automatically wait for DNS to propagate${N}"
+    echo -e "  ${Y}and then obtain an HTTPS certificate for the panel.${N}"
+    echo -e "  ${Y}(Press Ctrl+C to skip and do it manually later)${N}"
+    echo ""
+
+    WAITED=0
+    MAX_WAIT=600  # 10 minutes
+    RESOLVED=""
+    while [[ $WAITED -lt $MAX_WAIT ]]; do
+        RESOLVED=$(dig +short "$DOMAIN" A 2>/dev/null | tail -1 || true)
+        if [[ "$RESOLVED" == "$NEW_IP" ]]; then
+            break
+        fi
+        echo -ne "  ⏳ Waiting for DNS ($DOMAIN → $NEW_IP) ... current: ${RESOLVED:-not yet} [${WAITED}s]\r"
+        sleep 10
+        WAITED=$(( WAITED + 10 ))
+    done
+    echo ""
+
+    if [[ "$RESOLVED" == "$NEW_IP" ]]; then
+        ok "DNS resolved! $DOMAIN → $NEW_IP"
+        info "Obtaining HTTPS certificate for panel on new server..."
+        eval "$SSH_CMD 'certbot --nginx -d \"$DOMAIN\" --non-interactive --agree-tos --register-unsafely-without-email > /dev/null 2>&1 && systemctl restart nginx'" && \
+            ok "HTTPS certificate obtained! Panel is live at: ${G}https://$DOMAIN${N}" || \
+            warn "certbot failed. Run manually on new server: certbot --nginx -d $DOMAIN --non-interactive --agree-tos --register-unsafely-without-email"
+    else
+        warn "DNS did not resolve to $NEW_IP within 10 minutes."
+        warn "Run this manually after DNS update:"
+        echo -e "  ${C}ssh root@$NEW_IP 'certbot --nginx -d $DOMAIN --non-interactive --agree-tos --register-unsafely-without-email && systemctl restart nginx'${N}"
+    fi
+else
+    echo -e "${Y}NEXT SIMPLE STEP:${N}"
+    echo "Change the DNS A-Record of your VPN subdomain to point to: ${G}$NEW_IP${N}"
+    echo "Once DNS updates, all existing users on Android, iOS and Windows will connect"
+    echo "to the new server automatically without downloading any new profile!"
+fi
 echo ""
