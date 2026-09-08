@@ -57,6 +57,25 @@ fi
 log "Target Domain/IP: $DOMAIN"
 log "Admin Username:   $ADMIN_USER"
 
+# 3b. Ensure enough memory for build (create swap if needed)
+TOTAL_MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+SWAP_TOTAL_KB=$(grep SwapTotal /proc/meminfo | awk '{print $2}')
+AVAIL_MEM_KB=$(( TOTAL_MEM_KB + SWAP_TOTAL_KB ))
+if [[ $AVAIL_MEM_KB -lt 1400000 ]]; then
+    warn "Low memory detected ($(( AVAIL_MEM_KB / 1024 )) MB). Creating 2 GB swap file to prevent build failures..."
+    if [[ ! -f /swapfile ]]; then
+        fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+        chmod 600 /swapfile
+        mkswap /swapfile > /dev/null
+        swapon /swapfile
+        grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+        ok "2 GB swap file created and activated."
+    else
+        swapon /swapfile 2>/dev/null || true
+        ok "Existing swap file activated."
+    fi
+fi
+
 # 3. System Packages
 log "Updating package lists and installing dependencies..."
 export DEBIAN_FRONTEND=noninteractive
