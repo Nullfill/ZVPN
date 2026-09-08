@@ -84,6 +84,46 @@ sudo bash upgrade.sh
 
 ---
 
+## 🚚 انتقال سرور بدون قطعی (Zero-Downtime Migration)
+
+برای انتقال کامل پنل از سرور **قدیمی** به سرور **جدید** — شامل دیتابیس، گواهی‌های ریشه CA، رمزنگاری‌ها و تنظیمات IKEv2 — بدون نیاز به دانلود مجدد پروفایل توسط کاربران:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Nullfill/ZVPN/main/ops/migrate-server.sh -o /tmp/migrate.sh && bash /tmp/migrate.sh
+```
+
+> دستور را **روی سرور قدیمی** به عنوان root اجرا کنید. اسکریپت از شما IP، پورت SSH و رمز عبور root سرور جدید را می‌خواهد و بقیه مراحل به صورت کاملاً خودکار انجام می‌شود.
+
+**چه چیزی منتقل می‌شود؟**
+- ✅ دیتابیس کامل (کاربران، مصرف ترافیک، توکن‌ها، تاریخچه)
+- ✅ گواهی ریشه CA — کاربران نیازی به دانلود مجدد پروفایل ندارند
+- ✅ کلیدهای رمزنگاری پنل (`.env`)
+- ✅ پیکربندی‌های strongSwan و IKEv2
+- ✅ گواهی SSL پنل (Let's Encrypt)
+- ✅ بهینه‌سازی‌های شبکه (BBR, AES-GCM, Cloudflare DNS)
+- ✅ انتظار خودکار برای تغییر DNS و دریافت HTTPS بدون نیاز به لاگین دستی
+
+---
+
+## ⚡ بهینه‌سازی سرعت اینستاگرام و شبکه‌های اجتماعی
+
+برای بهینه‌سازی سرور جهت بارگذاری سریع‌تر اینستاگرام، یوتیوب و شبکه‌های اجتماعی:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Nullfill/ZVPN/main/ops/optimize-instagram.sh | bash
+```
+
+**بهینه‌سازی‌های اعمال‌شده:**
+- BBR Congestion Control + fq_codel Queue Discipline
+- بافر شبکه ۱۲۸ مگابایت برای ویدیوهای ۴K
+- TCP Fast Open (کاهش تأخیر اولین بایت)
+- رمزنگاری سخت‌افزاری AES-GCM (صفر بار CPU)
+- DNS Cloudflare 1.1.1.1 (سریع‌ترین Resolver دنیا)
+- CPU IRQ Balancing (توزیع ترافیک روی همه هسته‌ها)
+- TCP MSS Clamping (حذف تصاویر و ویدیوهای شکسته در تانل VPN)
+
+---
+
 ## 📁 ساختار مخزن (Repository Structure)
 
 ```text
@@ -107,7 +147,10 @@ sudo bash upgrade.sh
 │   ├── helper/            # اسکریپت روت با دسترسی محدود (zvpn-helper)
 │   ├── migrations/        # مایگریشن‌های دیتابیس
 │   ├── systemd/           # سرویس لینوکس zvpn-panel.service
-│   └── nginx/             # تمپلیت Nginx Reverse Proxy
+│   ├── nginx/             # تمپلیت Nginx Reverse Proxy
+│   ├── migrate-server.sh  # ابزار انتقال zero-downtime سرور
+│   ├── optimize-speed.sh  # بهینه‌سازی پایه BBR و شبکه
+│   └── optimize-instagram.sh  # بهینه‌سازی اینستاگرام و شبکه‌های اجتماعی
 ├── docs/                  # مستندات معماری، استقرار، امنیت و عیب‌یابی
 ├── install.sh             # اسکریپت نصب خودکار
 ├── upgrade.sh             # اسکریپت ارتقای امن
