@@ -253,6 +253,13 @@ app.post('/api/users/:id/reset-activation', requireAdmin, operatorOnly, requireU
   res.json({ user });
 }));
 
+app.post('/api/users/:id/reset-traffic', requireAdmin, operatorOnly, requireUserId, asyncHandler(async (req, res) => {
+  const user = await updateUser(req.params.id, { resetUsage: true });
+  if (!user) return apiError(res, 404, 'NOT_FOUND');
+  await audit(req.admin.id, 'user.reset_traffic', 'user', user.id, {}, clientIp(req));
+  res.json({ user });
+}));
+
 app.delete('/api/users/:id', requireAdmin, operatorOnly, requireUserId, asyncHandler(async (req, res) => {
   const u = await one('SELECT username FROM vpn_users WHERE id=$1', [req.params.id]);
   if (!u) return apiError(res, 404, 'NOT_FOUND');
@@ -310,7 +317,7 @@ app.post('/api/admin/password', requireAdmin, asyncHandler(async (req, res) => {
 mountV211Routes(app, { requireAdmin, requireRole, audit, clientIp, asyncHandler });
 
 async function tokenUser(token) {
-  return one(`SELECT * FROM vpn_users WHERE download_token=$1 AND download_token_revoked=false AND (download_token_expires_at IS NULL OR download_token_expires_at>now())`, [token]);
+  return one(`SELECT * FROM vpn_users WHERE download_token=$1 AND download_token_revoked=false`, [token]);
 }
 
 app.get('/d/:token', asyncHandler(async (req, res) => {

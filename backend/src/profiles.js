@@ -151,30 +151,33 @@ Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host "     ZVPN Windows IKEv2 Installer        " -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
 
-# 1. Install Root CA into Trusted Root Certification Authorities
+# 1. Start Windows Network Services & Configure Registry
+try {
+    Set-Service -Name RasMan -StartupType Manual -ErrorAction SilentlyContinue
+    Start-Service -Name RasMan -ErrorAction SilentlyContinue
+    Set-Service -Name PolicyAgent -StartupType Manual -ErrorAction SilentlyContinue
+    Start-Service -Name PolicyAgent -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\PolicyAgent' -Name 'AssumeUDPEncapsulationContextOnSendRule' -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\RasMan\\Parameters' -Name 'ProhibitIPSec' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+} catch {}
+
+# 2. Install Root CA into Trusted Root Certification Authorities
 try {
     Write-Host "[1/4] Installing Trusted Root CA Certificate..." -ForegroundColor Yellow
     $tempCert = Join-Path $env:TEMP ('zvpn-ca-' + [guid]::NewGuid().ToString() + '.cer')
     [IO.File]::WriteAllBytes($tempCert, [Convert]::FromBase64String($CaBase64))
-    Import-Certificate -FilePath $tempCert -CertStoreLocation 'Cert:\\LocalMachine\\Root' | Out-Null
+    Import-Certificate -FilePath $tempCert -CertStoreLocation 'Cert:\\LocalMachine\\Root' -ErrorAction SilentlyContinue | Out-Null
+    Import-Certificate -FilePath $tempCert -CertStoreLocation 'Cert:\\CurrentUser\\Root' -ErrorAction SilentlyContinue | Out-Null
+    certutil.exe -addstore -f "Root" $tempCert 2>$null | Out-Null
+    certutil.exe -addstore -f -enterprise "Root" $tempCert 2>$null | Out-Null
     Remove-Item $tempCert -Force -ErrorAction SilentlyContinue
     Write-Host "  -> Root CA installed successfully." -ForegroundColor Green
 } catch {
     Write-Host "  -> Warning: Could not install CA to LocalMachine; trying CurrentUser..." -ForegroundColor Yellow
-    Import-Certificate -FilePath $tempCert -CertStoreLocation 'Cert:\\CurrentUser\\Root' -ErrorAction SilentlyContinue | Out-Null
-}
-
-# 2. Configure Windows NAT-T Registry Fix (AssumeUDPEncapsulationContextOnSendRule = 2)
-try {
-    Write-Host "[2/4] Applying Windows IPsec NAT-T Compatibility..." -ForegroundColor Yellow
-    Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\PolicyAgent' -Name 'AssumeUDPEncapsulationContextOnSendRule' -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
-    Write-Host "  -> NAT-T registry key configured." -ForegroundColor Green
-} catch {
-    # Non-fatal if regular user
 }
 
 # 3. Create or Replace VPN Connection
-Write-Host "[3/4] Creating IKEv2 VPN Connection: $VpnName" -ForegroundColor Yellow
+Write-Host "[2/4] Creating IKEv2 VPN Connection: $VpnName" -ForegroundColor Yellow
 Remove-VpnConnection -Name $VpnName -Force -ErrorAction SilentlyContinue
 Remove-VpnConnection -Name $VpnName -AllUserConnection -Force -ErrorAction SilentlyContinue
 
@@ -184,15 +187,16 @@ try {
     Add-VpnConnection -Name $VpnName -ServerAddress $ServerAddress -TunnelType Ikev2 -EncryptionLevel Maximum -RememberCredential -Force | Out-Null
 }
 
-# 4. Set Hardware-Accelerated High-Security IPsec Parameters
+# 4. Set Hardware-Accelerated High-Security IPsec Parameters with Revert Fallback
 try {
-    Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTransformConstants SHA256128 -CipherTransformConstants AES128 -EncryptionMethod AES128 -IntegrityCheckMethod SHA256 -PfsGroup None -DHGroup ECP256 -Force | Out-Null
+    Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTransformConstants GCMAES128 -CipherTransformConstants GCMAES128 -EncryptionMethod GCMAES128 -IntegrityCheckMethod SHA256 -PfsGroup None -DHGroup ECP256 -Force -ErrorAction Stop | Out-Null
     Write-Host "  -> IPsec crypto suite configured (AES-128 / SHA-256 / ECP-256)." -ForegroundColor Green
 } catch {
     try {
-        Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTransformConstants SHA256128 -CipherTransformConstants AES128 -EncryptionMethod AES128 -IntegrityCheckMethod SHA256 -PfsGroup None -DHGroup Group14 -Force | Out-Null
+        Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -AuthenticationTransformConstants SHA256128 -CipherTransformConstants AES128 -EncryptionMethod AES128 -IntegrityCheckMethod SHA256 -PfsGroup None -DHGroup Group14 -Force -ErrorAction Stop | Out-Null
         Write-Host "  -> IPsec crypto suite configured (AES-128 / SHA-256 / Group14)." -ForegroundColor Green
     } catch {
+        Set-VpnConnectionIPsecConfiguration -ConnectionName $VpnName -Revert -Force -ErrorAction SilentlyContinue | Out-Null
         Write-Host "  -> Default Windows IKEv2 proposal maintained." -ForegroundColor Yellow
     }
 }

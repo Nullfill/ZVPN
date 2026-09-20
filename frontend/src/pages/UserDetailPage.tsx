@@ -156,6 +156,7 @@ export default function UserDetailPage() {
           <button type="button" className="btn-ghost" disabled={loading} onClick={() => action(`/api/users/${id}/add-traffic`, 'POST', { gigabytes: 10 })}><Plus size={16} /> +۱۰ GB</button>
           <button type="button" className="btn-ghost" disabled={loading} onClick={() => action(`/api/users/${id}/reset-password`)}><KeyRound size={16} /> رمز جدید</button>
           <button type="button" className="btn-ghost" disabled={loading} onClick={() => setConfirm({ action: 'reset-activation', title: 'ریست فعال‌سازی', message: 'first_connected_at پاک می‌شود. فقط برای کاربران با مدت از اولین اتصال.' })}>ریست فعال‌سازی</button>
+          <button type="button" className="btn-ghost text-amber-400" disabled={loading} onClick={() => setConfirm({ action: 'reset-traffic', title: 'ریست ترافیک', message: 'حجم مصرفی کل و امروز کاربر صفر می‌شود و ترافیک حساب بازنشانی می‌گردد.' })}>ریست ترافیک</button>
           <button type="button" className="btn-ghost text-rose-400" disabled={loading} onClick={() => {
             const name = prompt(`برای حذف، نام کاربری «${u.username}» را وارد کنید:`);
             if (name === u.username) action(`/api/users/${id}`, 'DELETE').then(() => navigate('/users'));
@@ -167,13 +168,14 @@ export default function UserDetailPage() {
         open={!!confirm}
         title={confirm?.title || ''}
         message={confirm?.message || ''}
-        danger={confirm?.action === 'revoke'}
+        danger={confirm?.action === 'revoke' || confirm?.action === 'reset-traffic'}
         loading={loading}
         onClose={() => setConfirm(null)}
         onConfirm={async () => {
           if (confirm?.action === 'regenerate') await action(`/api/users/${id}/regenerate-link`);
           else if (confirm?.action === 'revoke') await action(`/api/users/${id}/revoke-link`);
           else if (confirm?.action === 'reset-activation') await action(`/api/users/${id}/reset-activation`);
+          else if (confirm?.action === 'reset-traffic') await action(`/api/users/${id}/reset-traffic`);
         }}
       />
 
@@ -198,7 +200,7 @@ function EditUserModal({ open, user, onClose, onSaved }: { open: boolean; user: 
   useEffect(() => {
     if (!open) return;
     setForm({
-      expiresAt: user.expiresAt ? new Date(user.expiresAt).toISOString().slice(0, 16) : '',
+      expiresAt: user.expiresAt ? new Date(user.expiresAt).toISOString().slice(0, 10) : '',
       durationDays: user.durationDays ? String(user.durationDays) : '',
       dailyGB: bytesToGb(user.dailyLimitBytes),
       totalGB: bytesToGb(user.totalLimitBytes),
@@ -242,50 +244,117 @@ function EditUserModal({ open, user, onClose, onSaved }: { open: boolean; user: 
 
   return (
     <Modal open={open} onClose={onClose} wide>
-      <form onSubmit={submit}>
-        <h3 className="text-lg font-bold">ویرایش {user.username}</h3>
-        <EditFormFields form={form} setForm={setForm} showEnabled />
+      <form onSubmit={submit} className="flex flex-col gap-0">
+        <h3 className="text-lg font-bold mb-5">ویرایش {user.username}</h3>
+        <MobileFormFields form={form} setForm={setForm} showEnabled />
         {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
-        <div className="mt-6 flex justify-end gap-3">
-          <button type="button" className="btn-ghost" onClick={onClose}>انصراف</button>
-          <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : 'ذخیره'}</button>
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:justify-end">
+          <button type="button" className="btn-ghost min-h-[48px] text-base" onClick={onClose}>انصراف</button>
+          <button type="submit" className="btn-primary min-h-[48px] text-base" disabled={saving}>{saving ? 'در حال ذخیره…' : 'ذخیره'}</button>
         </div>
       </form>
     </Modal>
   );
 }
 
-function EditFormFields({ form, setForm, showEnabled }: {
+function MobileFormFields({ form, setForm, showEnabled }: {
   form: { expiresAt: string; durationDays: string; dailyGB: string; totalGB: string; maxDevices: string; note: string; enabled: boolean; unlimited: boolean; mode: 'date' | 'duration' };
   setForm: (f: typeof form) => void;
   showEnabled?: boolean;
 }) {
+  const f = form;
+  const s = setForm;
+
   return (
-    <div className="mt-4 grid gap-4 sm:grid-cols-2">
-      <label className="block"><span className="text-sm text-slate-400">نوع انقضا</span>
-        <select className="input mt-1" value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value as 'date' | 'duration' })}>
-          <option value="duration">مدت از اولین اتصال</option>
-          <option value="date">تاریخ ثابت</option>
-        </select></label>
-      {form.mode === 'duration' ? (
-        <label className="block"><span className="text-sm text-slate-400">مدت (روز)</span>
-          <input className="input mt-1" type="number" min="1" value={form.durationDays} onChange={(e) => setForm({ ...form, durationDays: e.target.value })} /></label>
-      ) : (
-        <label className="block"><span className="text-sm text-slate-400">تاریخ انقضا</span>
-          <input className="input mt-1" type="datetime-local" value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} /></label>
-      )}
-      <label className="block"><span className="text-sm text-slate-400">حجم روزانه (GB)</span>
-        <input className="input mt-1" type="number" step="0.1" value={form.dailyGB} onChange={(e) => setForm({ ...form, dailyGB: e.target.value })} placeholder="نامحدود" /></label>
-      <label className="block"><span className="text-sm text-slate-400">حجم کل (GB)</span>
-        <input className="input mt-1" type="number" step="0.1" disabled={form.unlimited} value={form.totalGB} onChange={(e) => setForm({ ...form, totalGB: e.target.value })} placeholder="نامحدود" /></label>
-      <label className="flex items-center gap-2"><input type="checkbox" checked={form.unlimited} onChange={(e) => setForm({ ...form, unlimited: e.target.checked })} /> نامحدود</label>
-      <label className="block"><span className="text-sm text-slate-400">حداکثر دستگاه</span>
-        <input className="input mt-1" type="number" min="1" max="10" value={form.maxDevices} onChange={(e) => setForm({ ...form, maxDevices: e.target.value })} /></label>
-      <label className="block sm:col-span-2"><span className="text-sm text-slate-400">یادداشت</span>
-        <textarea className="input mt-1" rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></label>
-      {showEnabled && (
-        <label className="flex items-center gap-2 sm:col-span-2"><input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> فعال</label>
-      )}
+    <div className="flex flex-col gap-5">
+
+      {/* ─── انقضا ─── */}
+      <fieldset className="rounded-xl border border-white/10 px-4 pt-3 pb-4">
+        <legend className="px-1 text-xs font-semibold text-slate-400 tracking-wide">انقضا</legend>
+
+        {/* Toggle: نوع انقضا */}
+        <div className="flex gap-2 mb-4">
+          {(['duration', 'date'] as const).map((v) => (
+            <button key={v} type="button"
+              onClick={() => s({ ...f, mode: v })}
+              className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${f.mode === v ? 'bg-indigo-600 text-white' : 'bg-white/5 text-slate-400'}`}>
+              {v === 'duration' ? 'مدت (روز)' : 'تاریخ ثابت'}
+            </button>
+          ))}
+        </div>
+
+        {f.mode === 'duration' ? (
+          <label className="block">
+            <span className="text-xs text-slate-400 mb-1 block">تعداد روز از اولین اتصال</span>
+            <div className="flex items-center gap-2">
+              <button type="button" className="icon-button text-lg w-11 h-11 shrink-0" onClick={() => s({ ...f, durationDays: String(Math.max(1, Number(f.durationDays || 0) - 1) ) })}>−</button>
+              <input className="input text-center flex-1 min-h-[44px]" inputMode="numeric" value={f.durationDays} onChange={(e) => s({ ...f, durationDays: e.target.value.replace(/\D/g, '') })} placeholder="۳۰" />
+              <button type="button" className="icon-button text-lg w-11 h-11 shrink-0" onClick={() => s({ ...f, durationDays: String(Number(f.durationDays || 0) + 1) })}>+</button>
+            </div>
+          </label>
+        ) : (
+          <label className="block">
+            <span className="text-xs text-slate-400 mb-1 block">تاریخ انقضا</span>
+            <input className="input min-h-[44px]" type="date" value={f.expiresAt} onChange={(e) => s({ ...f, expiresAt: e.target.value })} />
+          </label>
+        )}
+      </fieldset>
+
+      {/* ─── ترافیک ─── */}
+      <fieldset className="rounded-xl border border-white/10 px-4 pt-3 pb-4">
+        <legend className="px-1 text-xs font-semibold text-slate-400 tracking-wide">ترافیک</legend>
+
+        {/* نامحدود toggle */}
+        <button type="button"
+          onClick={() => s({ ...f, unlimited: !f.unlimited })}
+          className={`mb-4 flex w-full items-center justify-between rounded-lg px-4 py-3 text-sm font-medium transition-colors ${f.unlimited ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/40' : 'bg-white/5 text-slate-400 border border-white/10'}`}>
+          <span>ترافیک نامحدود</span>
+          <span className={`h-5 w-9 rounded-full transition-colors relative ${f.unlimited ? 'bg-emerald-500' : 'bg-slate-600'}`}>
+            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${f.unlimited ? 'translate-x-4' : 'translate-x-0.5'}`} />
+          </span>
+        </button>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-xs text-slate-400 mb-1 block">روزانه (GB)</span>
+            <input className="input min-h-[44px]" inputMode="decimal" value={f.dailyGB} onChange={(e) => s({ ...f, dailyGB: e.target.value })} placeholder="نامحدود" />
+          </label>
+          <label className="block">
+            <span className="text-xs text-slate-400 mb-1 block">کل (GB)</span>
+            <input className="input min-h-[44px]" inputMode="decimal" disabled={f.unlimited} value={f.totalGB} onChange={(e) => s({ ...f, totalGB: e.target.value })} placeholder="نامحدود" />
+          </label>
+        </div>
+      </fieldset>
+
+      {/* ─── تنظیمات ─── */}
+      <fieldset className="rounded-xl border border-white/10 px-4 pt-3 pb-4">
+        <legend className="px-1 text-xs font-semibold text-slate-400 tracking-wide">تنظیمات</legend>
+
+        <label className="block mb-3">
+          <span className="text-xs text-slate-400 mb-1 block">حداکثر دستگاه همزمان</span>
+          <div className="flex items-center gap-2">
+            <button type="button" className="icon-button text-lg w-11 h-11 shrink-0" onClick={() => s({ ...f, maxDevices: String(Math.max(1, Number(f.maxDevices) - 1)) })}>−</button>
+            <input className="input text-center flex-1 min-h-[44px]" inputMode="numeric" value={f.maxDevices} onChange={(e) => s({ ...f, maxDevices: e.target.value.replace(/\D/g, '') })} />
+            <button type="button" className="icon-button text-lg w-11 h-11 shrink-0" onClick={() => s({ ...f, maxDevices: String(Math.min(10, Number(f.maxDevices) + 1)) })}>+</button>
+          </div>
+        </label>
+
+        {showEnabled && (
+          <button type="button"
+            onClick={() => s({ ...f, enabled: !f.enabled })}
+            className={`flex w-full items-center justify-between rounded-lg px-4 py-3 text-sm font-medium transition-colors mb-3 ${f.enabled ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/40' : 'bg-rose-600/10 text-rose-400 border border-rose-500/30'}`}>
+            <span>{f.enabled ? 'حساب فعال است' : 'حساب غیرفعال است'}</span>
+            <span className={`h-5 w-9 rounded-full transition-colors relative ${f.enabled ? 'bg-emerald-500' : 'bg-slate-600'}`}>
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${f.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            </span>
+          </button>
+        )}
+
+        <label className="block">
+          <span className="text-xs text-slate-400 mb-1 block">یادداشت (اختیاری)</span>
+          <textarea className="input" rows={2} value={f.note} onChange={(e) => s({ ...f, note: e.target.value })} placeholder="مثلاً: مشتری تهران" />
+        </label>
+      </fieldset>
     </div>
   );
 }
