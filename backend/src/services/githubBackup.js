@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 import fs from 'node:fs';
 import { getSetting, updateSettings } from './settings.js';
+import { config } from '../config.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,20 +15,24 @@ export async function runGithubBackupNow() {
     throw new Error('GitHub token و repo پیکربندی نشده‌اند');
   }
 
-  // Inject credentials as env vars so the shell script can read them without
-  // touching the .env file on disk (avoids race conditions with concurrent requests).
-  const env = {
-    ...process.env,
-    BACKUP_GITHUB_TOKEN: cfg.token,
-    BACKUP_GITHUB_REPO: cfg.repo,
-    BACKUP_PASSPHRASE: cfg.passphrase || '',
-  };
+  const helperPath = config.helper || '/usr/local/sbin/zvpn-helper';
+  const args = [cfg.token, cfg.repo, cfg.passphrase || ''];
 
   try {
-    const { stdout, stderr } = await execFileAsync('bash', [BACKUP_SCRIPT], {
-      env,
-      timeout: 5 * 60 * 1000, // 5 minutes
-    });
+    let stdout = '';
+    try {
+      const res = await execFileAsync('sudo', [helperPath, 'backup-github', ...args], {
+        timeout: 5 * 60 * 1000,
+        maxBuffer: 10 * 1024 * 1024,
+      });
+      stdout = res.stdout;
+    } catch {
+      const res = await execFileAsync('sudo', [BACKUP_SCRIPT, ...args], {
+        timeout: 5 * 60 * 1000,
+        maxBuffer: 10 * 1024 * 1024,
+      });
+      stdout = res.stdout;
+    }
 
     const now = new Date().toISOString();
     await updateSettings('github', {
@@ -37,13 +42,14 @@ export async function runGithubBackupNow() {
     });
     return { ok: true, output: stdout };
   } catch (err) {
+    const errorMsg = (err.stderr || err.stdout || err.message || 'خطا در پشتیبان‌گیری').toString().trim().slice(0, 500);
     const now = new Date().toISOString();
     await updateSettings('github', {
       lastBackupAt: now,
       lastStatus: 'error',
-      lastError: err.message?.slice(0, 500) || 'Unknown error',
+      lastError: errorMsg,
     });
-    throw new Error(err.stderr?.slice(0, 500) || err.message);
+    throw new Error(errorMsg);
   }
 }
 

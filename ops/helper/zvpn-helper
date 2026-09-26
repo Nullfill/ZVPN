@@ -221,6 +221,10 @@ case "$ACTION" in
     sleep 2
     systemctl is-active --quiet strongswan-starter
     ;;
+  backup-github)
+    shift
+    exec /opt/zvpn-panel/app/ops/backup-github.sh "$@"
+    ;;
   *)
     echo "unsupported action" >&2
     exit 2

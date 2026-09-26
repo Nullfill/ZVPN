@@ -31,9 +31,17 @@ die(){  echo -e "${R}[ERROR]${N} $*" >&2; exit 1; }
 # Load .env vars
 set -a; source "$ENV_FILE" 2>/dev/null || true; set +a
 
-GITHUB_TOKEN="${BACKUP_GITHUB_TOKEN:-}"
-GITHUB_REPO="${BACKUP_GITHUB_REPO:-}"
-BACKUP_PASS="${BACKUP_PASSPHRASE:-}"
+# Prefer arguments passed from CLI, then environment, then .env
+GITHUB_TOKEN="${1:-${BACKUP_GITHUB_TOKEN:-}}"
+GITHUB_REPO="${2:-${BACKUP_GITHUB_REPO:-}}"
+BACKUP_PASS="${3:-${BACKUP_PASSPHRASE:-}}"
+
+# Sync to .env if passed from CLI
+if [[ -n "${1:-}" && -f "$ENV_FILE" ]]; then
+  grep -q '^BACKUP_GITHUB_TOKEN=' "$ENV_FILE" && sed -i "s|^BACKUP_GITHUB_TOKEN=.*|BACKUP_GITHUB_TOKEN=$GITHUB_TOKEN|" "$ENV_FILE" || echo "BACKUP_GITHUB_TOKEN=$GITHUB_TOKEN" >> "$ENV_FILE"
+  grep -q '^BACKUP_GITHUB_REPO=' "$ENV_FILE" && sed -i "s|^BACKUP_GITHUB_REPO=.*|BACKUP_GITHUB_REPO=$GITHUB_REPO|" "$ENV_FILE" || echo "BACKUP_GITHUB_REPO=$GITHUB_REPO" >> "$ENV_FILE"
+  grep -q '^BACKUP_PASSPHRASE=' "$ENV_FILE" && sed -i "s|^BACKUP_PASSPHRASE=.*|BACKUP_PASSPHRASE=$BACKUP_PASS|" "$ENV_FILE" || echo "BACKUP_PASSPHRASE=$BACKUP_PASS" >> "$ENV_FILE"
+fi
 
 # ── Validate config ──────────────────────────────────────────
 if [[ -z "$GITHUB_TOKEN" || -z "$GITHUB_REPO" ]]; then

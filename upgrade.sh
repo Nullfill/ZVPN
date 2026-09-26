@@ -107,9 +107,16 @@ if [[ -f "$APP_DIR/ops/helper/zvpn-helper" ]]; then
   install -o root -g root -m 0755 "$APP_DIR/ops/helper/zvpn-helper" /usr/local/sbin/zvpn-helper
 fi
 
-if [[ -f "/etc/sudoers.d/zvpn-panel" ]]; then
-  chmod 440 /etc/sudoers.d/zvpn-panel
-fi
+chmod +x "$APP_DIR/ops/backup-github.sh" 2>/dev/null || true
+chmod +x "$APP_DIR/ops/restore-github.sh" 2>/dev/null || true
+
+# Configure sudoers for zvpn user
+cat << 'EOF' > /etc/sudoers.d/zvpn-panel
+zvpn ALL=(ALL) NOPASSWD: /usr/local/sbin/zvpn-helper
+zvpn ALL=(ALL) NOPASSWD: /opt/zvpn-panel/app/ops/backup-github.sh
+EOF
+chmod 440 /etc/sudoers.d/zvpn-panel
+ok "Helper & sudoers updated"
 
 # ── Step 7: Start service ────────────────────────────────────
 info "Starting ZVPN Panel service..."
