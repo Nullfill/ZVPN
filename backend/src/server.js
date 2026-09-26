@@ -316,31 +316,48 @@ app.post('/api/admin/password', requireAdmin, asyncHandler(async (req, res) => {
 }));
 
 // ── GitHub Backup routes ────────────────────────────────────────────────────
+// Helper: surface GitHub errors as 400 (user error) not 500
+function githubError(res, err) {
+  return res.status(400).json({ error: 'GITHUB_ERROR', message: err.message || 'خطا در ارتباط با GitHub' });
+}
+
 app.post('/api/backup/github/test', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
-  const p = z.object({ token: z.string().min(1).max(256), repo: z.string().min(1).max(256) }).strict().safeParse(req.body);
+  const p = z.object({ token: z.string().min(1).max(512), repo: z.string().min(1).max(256) }).strict().safeParse(req.body);
   if (!p.success) return apiError(res, 400, 'INVALID_INPUT');
-  const result = await testGithubConnection(p.data.token, p.data.repo);
-  res.json(result);
+  // Validate repo format
+  if (!p.data.repo.includes('/')) {
+    return res.status(400).json({ error: 'GITHUB_ERROR', message: 'فرمت ریپو اشتباه است — باید به شکل username/repo-name باشد' });
+  }
+  try {
+    const result = await testGithubConnection(p.data.token, p.data.repo);
+    res.json(result);
+  } catch (err) { return githubError(res, err); }
 }));
 
 app.post('/api/backup/github/create-repo', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
-  const p = z.object({ token: z.string().min(1).max(256), repoName: z.string().min(1).max(100) }).strict().safeParse(req.body);
+  const p = z.object({ token: z.string().min(1).max(512), repoName: z.string().min(1).max(100) }).strict().safeParse(req.body);
   if (!p.success) return apiError(res, 400, 'INVALID_INPUT');
-  const result = await createGithubRepo(p.data.token, p.data.repoName);
-  res.json(result);
+  try {
+    const result = await createGithubRepo(p.data.token, p.data.repoName);
+    res.json(result);
+  } catch (err) { return githubError(res, err); }
 }));
 
 app.post('/api/backup/github/send-now', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
-  const result = await runGithubBackupNow();
-  await audit(req.admin.id, 'backup.github.manual', 'settings', null, {}, clientIp(req));
-  res.json(result);
+  try {
+    const result = await runGithubBackupNow();
+    await audit(req.admin.id, 'backup.github.manual', 'settings', null, {}, clientIp(req));
+    res.json(result);
+  } catch (err) { return githubError(res, err); }
 }));
 
 app.get('/api/backup/github/list', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
   const cfg = await getSetting('github');
   if (!cfg.token || !cfg.repo) return apiError(res, 400, 'NOT_CONFIGURED');
-  const backups = await listGithubBackups(cfg.token, cfg.repo);
-  res.json({ backups });
+  try {
+    const backups = await listGithubBackups(cfg.token, cfg.repo);
+    res.json({ backups });
+  } catch (err) { return githubError(res, err); }
 }));
 
 mountV211Routes(app, { requireAdmin, requireRole, audit, clientIp, asyncHandler });

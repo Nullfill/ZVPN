@@ -70,7 +70,7 @@ const SETTINGS_SCHEMAS = {
   }).strict(),
   github: z.object({
     enabled: z.boolean().optional(),
-    token: z.string().trim().max(256).optional(),
+    token: z.string().trim().max(512).optional(),
     repo: z.string().trim().max(256).optional(),
     passphrase: z.string().trim().max(256).optional(),
     intervalHours: z.coerce.number().int().min(1).max(168).optional(),
