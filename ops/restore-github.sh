@@ -104,7 +104,13 @@ ok "Downloaded ($(du -sh "$WORKDIR/$ASSET_NAME" | cut -f1))"
 
 # ── Decrypt if needed ────────────────────────────────────────
 if [[ "$ASSET_NAME" == *.enc ]]; then
-  [[ -n "$BACKUP_PASS" ]] || die "Backup is encrypted — provide BACKUP_PASS"
+  if [[ -z "$BACKUP_PASS" ]]; then
+    echo ""
+    warn "این فایل پشتیبان با پسفراز رمزنگاری شده است."
+    read -rp "لطفاً پسفراز بک‌آپ را وارد کنید: " BACKUP_PASS < /dev/tty || true
+    echo ""
+  fi
+  [[ -n "$BACKUP_PASS" ]] || die "فایل رمزنگاری شده است و پسفراز وارد نشد."
   info "Decrypting..."
   ARCHIVE="$WORKDIR/zvpn-restore.tar.gz"
   openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \

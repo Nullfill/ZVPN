@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Settings, Server, Shield, Database, Lock, Key, Download, Upload, Send, Bot, CheckCircle2, AlertTriangle, RefreshCw, Github, Plus, List } from 'lucide-react';
+import { Settings, Server, Shield, Database, Lock, Key, Download, Upload, Send, Bot, CheckCircle2, AlertTriangle, RefreshCw, Github, Plus, List, Copy } from 'lucide-react';
 import { api } from '../lib/api';
 import { GlassCard, PageHeader, Modal } from '../components/UI';
 import { useToast } from '../components/Toast';
@@ -728,6 +728,37 @@ export default function SettingsPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* 1-Click Restore Command */}
+              {githubForm.token && githubForm.repo && (
+                <div className="rounded-xl border border-violet-500/30 bg-violet-950/40 p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-violet-300 flex items-center gap-1.5">
+                      <Key size={14} className="text-violet-400" />
+                      دستور بازیابی اضطراری روی سرور جدید (۱-کلیک):
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-ghost text-[11px] py-1 px-2.5 text-violet-200 border-violet-500/40 hover:bg-violet-600/30 flex items-center gap-1"
+                      onClick={() => {
+                        const passArg = githubForm.passphrase ? ` BACKUP_PASS='${githubForm.passphrase}'` : '';
+                        const cmd = `curl -fsSL https://raw.githubusercontent.com/Nullfill/ZVPN/main/ops/restore-github.sh | sudo GITHUB_TOKEN='${githubForm.token}' GITHUB_REPO='${githubForm.repo}'${passArg} bash`;
+                        navigator.clipboard.writeText(cmd);
+                        toast('دستور بازیابی ۱-کلیک کپی شد ✓', 'success');
+                      }}
+                    >
+                      <Copy size={12} />
+                      کپی دستور
+                    </button>
+                  </div>
+                  <div className="bg-black/60 rounded-lg p-2 font-mono text-[11px] text-slate-300 break-all select-all border border-violet-900/40" dir="ltr">
+                    curl -fsSL https://raw.githubusercontent.com/Nullfill/ZVPN/main/ops/restore-github.sh | sudo GITHUB_TOKEN='{githubForm.token.slice(0, 10)}...' GITHUB_REPO='{githubForm.repo}'{githubForm.passphrase ? " BACKUP_PASS='***'" : ''} bash
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    اگر روزی این سرور بسوزد یا بخواهید به سرور جدید منتقل شوید، فقط کافیست این یک خط دستور را در ترمینال سرور جدید پیست و اینتر کنید. همه چیز بدون پرسیدن حتی یک سؤال خودکار می‌نشیند!
+                  </p>
                 </div>
               )}
 
