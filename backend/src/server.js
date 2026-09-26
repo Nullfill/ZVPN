@@ -24,7 +24,8 @@ import { disconnectIkeId } from './vpn.js';
 import { runMigrations } from './migrate.js';
 import { syncSecretsNow, syncStatus } from './services/syncQueue.js';
 import { listUsers, getUserById, provisionUser, updateUser, extendUser, addTraffic, deleteUser, regenerateToken, revokeToken, getUserStats, downloadLinks, bulkUsers, resetActivation, resetUserPassword } from './services/users.js';
-import { getSettings, updateSettings, validateSettingsPatch } from './services/settings.js';
+import { getSettings, updateSettings, validateSettingsPatch, getSetting } from './services/settings.js';
+import { runGithubBackupNow, testGithubConnection, createGithubRepo, listGithubBackups, scheduleGithubBackup } from './services/githubBackup.js';
 import { mountV211Routes } from './routes/v211.js';
 import { apiError, errorHandler, notFoundHandler } from './utils/errors.js';
 import { bytes } from './utils/format.js';
@@ -314,6 +315,34 @@ app.post('/api/admin/password', requireAdmin, asyncHandler(async (req, res) => {
   res.json({ ok: true, reauthenticate: true });
 }));
 
+// ── GitHub Backup routes ────────────────────────────────────────────────────
+app.post('/api/backup/github/test', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
+  const p = z.object({ token: z.string().min(1).max(256), repo: z.string().min(1).max(256) }).strict().safeParse(req.body);
+  if (!p.success) return apiError(res, 400, 'INVALID_INPUT');
+  const result = await testGithubConnection(p.data.token, p.data.repo);
+  res.json(result);
+}));
+
+app.post('/api/backup/github/create-repo', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
+  const p = z.object({ token: z.string().min(1).max(256), repoName: z.string().min(1).max(100) }).strict().safeParse(req.body);
+  if (!p.success) return apiError(res, 400, 'INVALID_INPUT');
+  const result = await createGithubRepo(p.data.token, p.data.repoName);
+  res.json(result);
+}));
+
+app.post('/api/backup/github/send-now', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
+  const result = await runGithubBackupNow();
+  await audit(req.admin.id, 'backup.github.manual', 'settings', null, {}, clientIp(req));
+  res.json(result);
+}));
+
+app.get('/api/backup/github/list', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
+  const cfg = await getSetting('github');
+  if (!cfg.token || !cfg.repo) return apiError(res, 400, 'NOT_CONFIGURED');
+  const backups = await listGithubBackups(cfg.token, cfg.repo);
+  res.json({ backups });
+}));
+
 mountV211Routes(app, { requireAdmin, requireRole, audit, clientIp, asyncHandler });
 
 async function tokenUser(token) {
@@ -409,6 +438,7 @@ app.use(errorHandler);
 await runMigrations();
 await syncSecretsNow().catch((e) => console.error('[startup sync]', e.message));
 startWorker();
+scheduleGithubBackup();
 
 const server = app.listen(config.port, '127.0.0.1', () => console.log(`${config.panelName} v${config.version} on 127.0.0.1:${config.port}`));
 let shuttingDown = false;

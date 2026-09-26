@@ -23,6 +23,16 @@ const DEFAULTS = {
     lastStatus: null,
     lastError: null,
   },
+  github: {
+    enabled: false,
+    token: '',
+    repo: '',
+    passphrase: '',
+    intervalHours: 24,
+    lastBackupAt: null,
+    lastStatus: null,
+    lastError: null,
+  },
 };
 
 const SETTINGS_SCHEMAS = {
@@ -54,6 +64,16 @@ const SETTINGS_SCHEMAS = {
     chatId: z.string().trim().max(64).optional(),
     intervalHours: z.coerce.number().int().min(1).max(168).optional(),
     includeAdmins: z.boolean().optional(),
+    lastBackupAt: z.string().nullable().optional(),
+    lastStatus: z.string().nullable().optional(),
+    lastError: z.string().nullable().optional(),
+  }).strict(),
+  github: z.object({
+    enabled: z.boolean().optional(),
+    token: z.string().trim().max(256).optional(),
+    repo: z.string().trim().max(256).optional(),
+    passphrase: z.string().trim().max(256).optional(),
+    intervalHours: z.coerce.number().int().min(1).max(168).optional(),
     lastBackupAt: z.string().nullable().optional(),
     lastStatus: z.string().nullable().optional(),
     lastError: z.string().nullable().optional(),

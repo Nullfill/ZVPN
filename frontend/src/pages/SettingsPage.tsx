@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Settings, Server, Shield, Database, Lock, Key, Download, Upload, Send, Bot, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Settings, Server, Shield, Database, Lock, Key, Download, Upload, Send, Bot, CheckCircle2, AlertTriangle, RefreshCw, Github, Plus, List } from 'lucide-react';
 import { api } from '../lib/api';
 import { GlassCard, PageHeader, Modal } from '../components/UI';
 import { useToast } from '../components/Toast';
@@ -17,6 +17,16 @@ interface PanelSettings {
     chatId: string;
     intervalHours: number;
     includeAdmins: boolean;
+    lastBackupAt: string | null;
+    lastStatus: 'success' | 'error' | null;
+    lastError: string | null;
+  };
+  github: {
+    enabled: boolean;
+    token: string;
+    repo: string;
+    passphrase: string;
+    intervalHours: number;
     lastBackupAt: string | null;
     lastStatus: 'success' | 'error' | null;
     lastError: string | null;
@@ -41,6 +51,12 @@ export default function SettingsPage() {
   });
   const [testingTelegram, setTestingTelegram] = useState(false);
   const [sendingTelegramNow, setSendingTelegramNow] = useState(false);
+  const [githubForm, setGithubForm] = useState({
+    enabled: false, token: '', repo: '', passphrase: '', intervalHours: 24,
+  });
+  const [githubStep, setGithubStep] = useState<'idle' | 'testing' | 'creating' | 'saving' | 'backing-up' | 'listing'>('idle');
+  const [githubBackups, setGithubBackups] = useState<{ id: number; name: string; tag: string; createdAt: string; size: number; fileName: string }[]>([]);
+  const [showGithubBackups, setShowGithubBackups] = useState(false);
   const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' });
   const [importMode, setImportMode] = useState<'merge' | 'full' | 'users-only'>('merge');
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
@@ -76,6 +92,15 @@ export default function SettingsPage() {
           includeAdmins: data.settings.telegram.includeAdmins ?? true,
         });
       }
+      if (data.settings.github) {
+        setGithubForm({
+          enabled: Boolean(data.settings.github.enabled),
+          token: data.settings.github.token || '',
+          repo: data.settings.github.repo || '',
+          passphrase: data.settings.github.passphrase || '',
+          intervalHours: Number(data.settings.github.intervalHours || 24),
+        });
+      }
     }
   }, [data]);
 
@@ -106,6 +131,61 @@ export default function SettingsPage() {
     },
     onError: (e: Error) => toast(e.message, 'error'),
   });
+
+  const updateGithub = useMutation({
+    mutationFn: () => api('/api/settings/github', { method: 'PATCH', body: JSON.stringify(githubForm) }),
+    onSuccess: () => {
+      toast('تنظیمات بک‌آپ GitHub ذخیره شد.', 'success');
+      qc.invalidateQueries({ queryKey: ['settings'] });
+    },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+
+  const createAndSaveGithubRepo = async () => {
+    if (!githubForm.token) { toast('ابتدا Personal Access Token وارد کنید', 'error'); return; }
+    const repoName = githubForm.repo || 'zvpn-backups';
+    setGithubStep('creating');
+    try {
+      const res = await api<{ ok: boolean; repo: string; url: string }>('/api/backup/github/create-repo', {
+        method: 'POST', body: JSON.stringify({ token: githubForm.token, repoName }),
+      });
+      setGithubForm(f => ({ ...f, repo: res.repo }));
+      toast(`ریپو خصوصی "${res.repo}" ساخته شد ✓`, 'success');
+    } catch (e: any) { toast(e.message, 'error'); }
+    finally { setGithubStep('idle'); }
+  };
+
+  const testGithubConnection = async () => {
+    if (!githubForm.token || !githubForm.repo) { toast('توکن و نام ریپو را وارد کنید', 'error'); return; }
+    setGithubStep('testing');
+    try {
+      const res = await api<{ ok: boolean; name: string; private: boolean }>('/api/backup/github/test', {
+        method: 'POST', body: JSON.stringify({ token: githubForm.token, repo: githubForm.repo }),
+      });
+      toast(`اتصال برقرار شد — ${res.name} (${res.private ? 'خصوصی' : 'عمومی'}) ✓`, 'success');
+    } catch (e: any) { toast(e.message, 'error'); }
+    finally { setGithubStep('idle'); }
+  };
+
+  const sendGithubBackupNow = async () => {
+    setGithubStep('backing-up');
+    try {
+      await api('/api/backup/github/send-now', { method: 'POST', body: '{}' });
+      toast('بک‌آپ با موفقیت روی GitHub آپلود شد ✓', 'success');
+      qc.invalidateQueries({ queryKey: ['settings'] });
+    } catch (e: any) { toast(e.message, 'error'); }
+    finally { setGithubStep('idle'); }
+  };
+
+  const loadGithubBackups = async () => {
+    setGithubStep('listing');
+    try {
+      const res = await api<{ backups: typeof githubBackups }>('/api/backup/github/list');
+      setGithubBackups(res.backups);
+      setShowGithubBackups(true);
+    } catch (e: any) { toast(e.message, 'error'); }
+    finally { setGithubStep('idle'); }
+  };
 
   const testTelegram = async () => {
     if (!telegramForm.botToken || !telegramForm.chatId) {
@@ -521,6 +601,158 @@ export default function SettingsPage() {
                   disabled={updateTelegram.isPending}
                 >
                   {updateTelegram.isPending ? 'در حال ذخیره...' : 'ذخیره تنظیمات تلگرام'}
+                </button>
+              </div>
+            </form>
+          </GlassCard>
+
+          {/* ── GitHub Backup Card ── */}
+          <GlassCard className="space-y-5 border border-violet-500/20 bg-gradient-to-br from-violet-950/20 via-slate-900/60 to-slate-950/80">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-violet-500/10 p-2.5 text-violet-400 border border-violet-500/20">
+                  <Github size={22} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    پشتیبان‌گیری خودکار روی GitHub
+                    <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] font-semibold text-violet-300">رمزنگاری‌شده</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">آپلود خودکار بک‌آپ کامل رمزنگاری‌شده (DB + گواهی‌ها + SSL) روی یک ریپوی خصوصی GitHub</p>
+                </div>
+              </div>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input type="checkbox" className="peer sr-only" checked={githubForm.enabled}
+                  onChange={(e) => setGithubForm({ ...githubForm, enabled: e.target.checked })} />
+                <div className="peer h-6 w-11 rounded-full bg-slate-800 border border-slate-700 after:absolute after:top-[2px] after:right-[2px] after:h-5 after:w-5 after:rounded-full after:bg-slate-400 after:transition-all after:content-[''] peer-checked:bg-violet-600 peer-checked:border-violet-500 peer-checked:after:-translate-x-full peer-checked:after:bg-white" />
+                <span className="mr-2 text-xs font-medium text-slate-300">{githubForm.enabled ? 'فعال' : 'غیرفعال'}</span>
+              </label>
+            </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); updateGithub.mutate(); }} className="space-y-4 pt-1">
+
+              {/* Token */}
+              <label className="block">
+                <span className="text-xs font-medium text-slate-300 flex items-center gap-1.5 mb-1">
+                  <Github size={13} className="text-violet-400" /> Personal Access Token
+                </span>
+                <input className="input font-mono text-xs" type="password" dir="ltr"
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                  value={githubForm.token}
+                  onChange={(e) => setGithubForm({ ...githubForm, token: e.target.value })} />
+                <span className="text-[11px] text-slate-500 mt-0.5 block">
+                  از <a href="https://github.com/settings/tokens" target="_blank" rel="noreferrer" className="text-violet-400 underline">github.com/settings/tokens</a> بسازید — scope: <code className="bg-slate-800 px-1 rounded">repo</code>
+                </span>
+              </label>
+
+              {/* Repo with auto-create */}
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-300 mb-1 block">نام ریپوی بک‌آپ (user/repo)</span>
+                  <input className="input font-mono text-xs" dir="ltr"
+                    placeholder="YourUser/zvpn-backups"
+                    value={githubForm.repo}
+                    onChange={(e) => setGithubForm({ ...githubForm, repo: e.target.value })} />
+                </label>
+                <button type="button"
+                  onClick={createAndSaveGithubRepo}
+                  disabled={githubStep !== 'idle' || !githubForm.token}
+                  className="btn-ghost text-xs border-violet-500/30 text-violet-300 hover:text-violet-200 self-end min-h-[40px] whitespace-nowrap">
+                  {githubStep === 'creating' ? <RefreshCw size={13} className="animate-spin" /> : <Plus size={13} />}
+                  ساخت ریپو خودکار
+                </button>
+              </div>
+
+              {/* Passphrase + Interval */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-300 mb-1 block">پسفراز رمزنگاری (AES-256)</span>
+                  <input className="input font-mono text-xs" type="password" dir="ltr"
+                    placeholder="یه پسورد قوی — نگهش دارید"
+                    value={githubForm.passphrase}
+                    onChange={(e) => setGithubForm({ ...githubForm, passphrase: e.target.value })} />
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">بدون این، بازیابی ممکن نیست</span>
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-300 mb-1 block">بازه زمانی خودکار</span>
+                  <select className="input" value={githubForm.intervalHours}
+                    onChange={(e) => setGithubForm({ ...githubForm, intervalHours: Number(e.target.value) })}>
+                    <option value={6}>هر ۶ ساعت</option>
+                    <option value={12}>هر ۱۲ ساعت</option>
+                    <option value={24}>هر ۲۴ ساعت (روزانه)</option>
+                    <option value={48}>هر ۴۸ ساعت</option>
+                    <option value={168}>هفتگی</option>
+                  </select>
+                </label>
+              </div>
+
+              {/* Status */}
+              {data?.settings?.github?.lastBackupAt && (
+                <div className="rounded-xl border border-slate-800 bg-black/40 p-3 text-xs flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {data.settings.github.lastStatus === 'success'
+                      ? <CheckCircle2 size={16} className="text-emerald-400" />
+                      : <AlertTriangle size={16} className="text-rose-400" />}
+                    <span className="text-slate-300">آخرین وضعیت:
+                      <span className={`mr-1 font-bold ${data.settings.github.lastStatus === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {data.settings.github.lastStatus === 'success' ? 'موفق ✓' : 'ناموفق'}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="text-slate-400 font-mono text-[11px]" dir="ltr">
+                    {new Date(data.settings.github.lastBackupAt).toLocaleString('fa-IR')}
+                  </div>
+                  {data.settings.github.lastError && (
+                    <div className="w-full text-rose-400 text-[11px] font-mono mt-1" dir="ltr">{data.settings.github.lastError}</div>
+                  )}
+                </div>
+              )}
+
+              {/* Backup list */}
+              {showGithubBackups && githubBackups.length > 0 && (
+                <div className="rounded-xl border border-slate-800 bg-black/30 overflow-hidden">
+                  <div className="px-3 py-2 text-xs text-slate-400 border-b border-slate-800 flex justify-between">
+                    <span>تاریخچه بک‌آپ‌ها ({githubBackups.length})</span>
+                    <button type="button" className="text-slate-500 hover:text-slate-300" onClick={() => setShowGithubBackups(false)}>بستن</button>
+                  </div>
+                  <div className="divide-y divide-slate-800/60 max-h-48 overflow-y-auto">
+                    {githubBackups.map(b => (
+                      <div key={b.id} className="px-3 py-2 text-xs flex justify-between items-center gap-2">
+                        <span className="text-slate-300 truncate">{b.name}</span>
+                        <span className="text-slate-500 font-mono shrink-0" dir="ltr">
+                          {(b.size / 1024 / 1024).toFixed(1)} MB
+                        </span>
+                        <span className="text-slate-600 font-mono text-[10px] shrink-0" dir="ltr">
+                          {new Date(b.createdAt).toLocaleDateString('fa-IR')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                <div className="flex items-center gap-2">
+                  <button type="button" className="btn-ghost text-xs"
+                    onClick={testGithubConnection} disabled={githubStep !== 'idle'}>
+                    {githubStep === 'testing' ? <RefreshCw size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                    تست اتصال
+                  </button>
+                  <button type="button"
+                    className="btn-ghost text-xs text-violet-300 hover:text-violet-200 border-violet-500/30"
+                    onClick={sendGithubBackupNow} disabled={githubStep !== 'idle' || !githubForm.token || !githubForm.repo}>
+                    {githubStep === 'backing-up' ? <RefreshCw size={13} className="animate-spin" /> : <Github size={13} />}
+                    بک‌آپ فوری
+                  </button>
+                  <button type="button" className="btn-ghost text-xs"
+                    onClick={loadGithubBackups} disabled={githubStep !== 'idle' || !githubForm.token || !githubForm.repo}>
+                    {githubStep === 'listing' ? <RefreshCw size={13} className="animate-spin" /> : <List size={13} />}
+                    تاریخچه
+                  </button>
+                </div>
+                <button className="btn-primary" type="submit" disabled={updateGithub.isPending}>
+                  {updateGithub.isPending ? 'در حال ذخیره...' : 'ذخیره تنظیمات GitHub'}
                 </button>
               </div>
             </form>
