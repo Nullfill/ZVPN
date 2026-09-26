@@ -296,6 +296,14 @@ sleep 2
 systemctl restart zvpn-panel                 2>/dev/null || true
 sleep 2
 
+DOMAIN="$(grep -E '^(PUBLIC_BASE_URL|VPN_SERVER)=' "$APP_DIR/backend/.env" 2>/dev/null | head -1 | cut -d= -f2- | sed -E 's#^https?://##;s#/.*##' || true)"
+
+# Configure/Verify HTTPS via certbot
+if [[ -n "$DOMAIN" && "$DOMAIN" =~ \. ]]; then
+  info "Applying SSL certificate for $DOMAIN..."
+  certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect >/dev/null 2>&1 || true
+fi
+
 if nginx -t >/dev/null 2>&1; then
   systemctl restart nginx 2>/dev/null || true
 else
