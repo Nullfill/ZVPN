@@ -238,6 +238,36 @@ if [[ -d "$APP_DIR/frontend" ]]; then
   chown -R root:root "$APP_DIR/frontend/dist" 2>/dev/null || true
 fi
 
+# ── Sudoers & Helper ──────────────────────────────────────────
+if [[ -f "$APP_DIR/ops/helper/zvpn-helper" ]]; then
+  info "Configuring zvpn-helper & sudoers..."
+  install -o root -g root -m 0755 "$APP_DIR/ops/helper/zvpn-helper" /usr/local/sbin/zvpn-helper
+fi
+chmod +x "$APP_DIR/ops/backup-github.sh" 2>/dev/null || true
+chmod +x "$APP_DIR/ops/restore-github.sh" 2>/dev/null || true
+cat << 'EOF' > /etc/sudoers.d/zvpn-panel
+zvpn ALL=(root) NOPASSWD: /usr/local/sbin/zvpn-helper, /usr/local/sbin/zvpn-helper *
+zvpn ALL=(root) NOPASSWD: /opt/zvpn-panel/app/ops/backup-github.sh, /opt/zvpn-panel/app/ops/backup-github.sh *
+EOF
+chmod 440 /etc/sudoers.d/zvpn-panel
+
+# ── Firewall & Routing ────────────────────────────────────────
+info "Configuring firewall and IP forwarding..."
+sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
+grep -q '^net.ipv4.ip_forward=1' /etc/sysctl.conf 2>/dev/null || echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+iptables -t nat -C POSTROUTING -s 10.0.0.0/8 -j MASQUERADE 2>/dev/null || \
+  iptables -t nat -A POSTROUTING -s 10.0.0.0/8 -j MASQUERADE 2>/dev/null || true
+iptables -C FORWARD -s 10.0.0.0/8 -j ACCEPT 2>/dev/null || \
+  iptables -A FORWARD -s 10.0.0.0/8 -j ACCEPT 2>/dev/null || true
+iptables -C FORWARD -d 10.0.0.0/8 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
+  iptables -A FORWARD -d 10.0.0.0/8 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
+iptables -t mangle -C FORWARD -p tcp -m tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \
+  iptables -t mangle -A FORWARD -p tcp -m tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
+
+# ── Optimizations ─────────────────────────────────────────────
+[[ -f "$APP_DIR/ops/optimize-speed.sh" ]] && bash "$APP_DIR/ops/optimize-speed.sh" 2>/dev/null || true
+[[ -f "$APP_DIR/ops/optimize-instagram.sh" ]] && bash "$APP_DIR/ops/optimize-instagram.sh" 2>/dev/null || true
+
 # ── Start services ────────────────────────────────────────────
 info "Starting all services..."
 systemctl daemon-reload
@@ -269,8 +299,9 @@ if [[ "${HEALTH_OK:-0}" -ne 1 ]]; then
   warn "Health check failed — run: journalctl -u zvpn-panel -n 60 --no-pager"
 fi
 
-# ── Summary ──────────────────────────────────────────────────
+# ── DNS & Migration Verification ─────────────────────────────
 DOMAIN="$(grep -E '^(PUBLIC_BASE_URL|VPN_SERVER)=' "$APP_DIR/backend/.env" 2>/dev/null | head -1 | cut -d= -f2- | sed -E 's#^https?://##;s#/.*##' || true)"
+MY_IP="$(curl -fs4s https://api.ipify.org 2>/dev/null || curl -fs4s https://ifconfig.me 2>/dev/null || ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' || true)"
 
 echo ""
 echo -e "${G}══════════════════════════════════════════════════${N}"
@@ -281,4 +312,25 @@ echo    "  Users:   All existing accounts restored"
 echo    "  Certs:   IPsec CA preserved — no re-download needed"
 echo    "  SSL:     Let's Encrypt restored"
 echo -e "${G}══════════════════════════════════════════════════${N}"
+echo ""
+
+if [[ -n "$DOMAIN" && "$DOMAIN" =~ \. ]]; then
+  RESOLVED="$(dig +short "$DOMAIN" A 2>/dev/null | tail -1 || true)"
+  if [[ -n "$MY_IP" && "$RESOLVED" == "$MY_IP" ]]; then
+    ok "DNS record matches this server! ($DOMAIN → $MY_IP)"
+    ok "Clients are connecting to this new server now!"
+  else
+    echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+    echo -e "${Y}  ⚠️ مرحله نهایی برای انتقال ترافیک کاربران:${N}"
+    echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+    echo -e "  دامنه:          ${C}$DOMAIN${N}"
+    echo -e "  آی‌پی سرور جدید: ${G}${MY_IP:-نامشخص}${N}"
+    echo -e "  آی‌پی در DNS:    ${R}${RESOLVED:-یافت نشد}${N}"
+    echo ""
+    echo -e "  ${Y}در کلودفلر یا پنل دامنه خود، رکورد A دامنه ${C}$DOMAIN${Y} را به ${G}$MY_IP${Y} تغییر دهید.${N}"
+    echo -e "  ${G}به محض تغییر آی‌پی، تمامی کاربران اندروید، آیفون و ویندوز قبلی${N}"
+    echo -e "  ${G}بدون هیچ تنظیمی به صورت خودکار به این سرور جدید متصل خواهند شد!${N}"
+    echo -e "${Y}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+  fi
+fi
 echo ""
