@@ -62,15 +62,27 @@ ok "Prerequisites ready"
 
 # ── Fetch latest backup from GitHub ─────────────────────────
 info "Fetching backup list from GitHub..."
-RELEASES="$(curl -fsSL \
+HTTP_RESP="$(curl -sSL -w "\nHTTP_STATUS:%{http_code}" \
   -H "Authorization: Bearer $GITHUB_TOKEN" \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
-  "https://api.github.com/repos/$GITHUB_REPO/releases?per_page=10" 2>/dev/null)"
+  "https://api.github.com/repos/$GITHUB_REPO/releases?per_page=10" || true)"
 
-[[ "$(echo "$RELEASES" | jq 'type')" == '"array"' ]] || \
-  die "Failed to fetch releases — check token and repo name"
-[[ "$(echo "$RELEASES" | jq 'length')" -gt 0 ]] || \
+HTTP_CODE="$(echo "$HTTP_RESP" | grep '^HTTP_STATUS:' | cut -d: -f2 || true)"
+RELEASES="$(echo "$HTTP_RESP" | sed '/^HTTP_STATUS:/d')"
+
+if [[ "$HTTP_CODE" == "401" ]]; then
+  die "توکن گیت‌هاب نامعتبر است (401 Unauthorized) — لطفاً توکن را بررسی کنید."
+elif [[ "$HTTP_CODE" == "404" ]]; then
+  die "ریپوی $GITHUB_REPO در گیت‌هاب پیدا نشد (404 Not Found) — نام ریپو را بررسی کنید."
+elif [[ "$HTTP_CODE" != "200" ]]; then
+  ERR_MSG="$(echo "$RELEASES" | jq -r '.message // empty' 2>/dev/null || echo "$RELEASES")"
+  die "خطای گیت‌هاب (کد $HTTP_CODE): $ERR_MSG"
+fi
+
+[[ "$(echo "$RELEASES" | jq 'type' 2>/dev/null)" == '"array"' ]] || \
+  die "Failed to parse releases from GitHub — check token and repo name"
+[[ "$(echo "$RELEASES" | jq 'length' 2>/dev/null)" -gt 0 ]] || \
   die "No backups found in $GITHUB_REPO — run backup-github.sh first"
 
 # Show available backups and pick latest
