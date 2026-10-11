@@ -6,7 +6,7 @@ import { getSettings, validateSettingsPatch } from './settings.js';
 import { queueSyncSecrets, syncSecretsNow } from './syncQueue.js';
 import { invalidateVpnConfigCache } from './vpnConfig.js';
 
-const EXPORT_VERSION = 2;
+const EXPORT_VERSION = 3;
 
 function digestPayload(payload) {
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
@@ -83,7 +83,7 @@ export async function exportPanelBackup({ includeAdmins = true, includeCerts = t
 }
 
 export async function importPanelBackup(data, { mode = 'merge' } = {}) {
-  if (!data || data.format !== 'zvpn-panel-backup' || ![1, 2].includes(data.formatVersion ?? 1)) {
+  if (!data || data.format !== 'zvpn-panel-backup' || ![1, 2, 3].includes(data.formatVersion ?? 1)) {
     throw new Error('INVALID_BACKUP_FORMAT');
   }
   if (!Array.isArray(data.users)) throw new Error('INVALID_BACKUP_USERS');
@@ -106,7 +106,7 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
   }
   if (data.settings && typeof data.settings === 'object') {
     for (const [key, value] of Object.entries(data.settings)) {
-      if (['general', 'vpn', 'appearance', 'download', 'telegram'].includes(key)) {
+      if (['general', 'vpn', 'appearance', 'download', 'telegram', 'github', 'xray'].includes(key)) {
         const parsed = validateSettingsPatch(key, value);
         if (!parsed.success) throw new Error('INVALID_BACKUP_SETTINGS');
       }
@@ -132,7 +132,7 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
   await tx(async (client) => {
     if (data.settings && mode !== 'users-only') {
       for (const [key, value] of Object.entries(data.settings)) {
-        if (!value || typeof value !== 'object' || !['general', 'vpn', 'appearance', 'download', 'telegram'].includes(key)) continue;
+        if (!value || typeof value !== 'object' || !['general', 'vpn', 'appearance', 'download', 'telegram', 'github', 'xray'].includes(key)) continue;
         await client.query(
           `INSERT INTO panel_settings(key, value, updated_at) VALUES($1, $2::jsonb, now())
            ON CONFLICT(key) DO UPDATE SET value=$2::jsonb, updated_at=now()`,
@@ -171,7 +171,7 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
       }
 
       const existing = await client.query('SELECT id FROM vpn_users WHERE username=$1', [u.username]);
-      if (existing.rowCount && mode === 'merge') {
+      if (existing.rowCount && mode !== 'users-only') {
         await client.query(
           `UPDATE vpn_users SET
             secret_enc=$2, enabled=$3, quota_blocked=$4, quota_reason=$5,
@@ -219,6 +219,13 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
         result.imported.users++;
       } else {
         result.skipped.users++;
+      }
+      if (!existing.rowCount || mode !== 'users-only') {
+        if (u.xray_uuid && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u.xray_uuid)) {
+          throw new Error('INVALID_XRAY_UUID');
+        }
+        await client.query('UPDATE vpn_users SET xray_uuid=COALESCE($1::uuid,xray_uuid),xray_usage_bytes=$2 WHERE username=$3',
+          [u.xray_uuid || null, u.xray_usage_bytes || 0, u.username]);
       }
     }
 

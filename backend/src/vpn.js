@@ -34,7 +34,6 @@ export async function syncSecrets() {
   }
   await helper(['sync-secrets']);
   await helper(['normalize-conn']);
-  await db.query(`UPDATE vpn_users SET provisioning_status='active', provisioning_error=NULL WHERE provisioning_status IN ('provisioning', 'failed')`);
 }
 
 async function helper(args) {

@@ -6,6 +6,7 @@ import { queueSyncSecrets } from './services/syncQueue.js';
 import { SessionReconciler } from './services/sessionReconciler.js';
 import { recordEvent } from './services/observability.js';
 import { checkAndDispatchTelegramBackup } from './services/telegramBackup.js';
+import { collectXrayUsage, stopXray } from './services/xray.js';
 
 let running = false;
 let lastSessions = [];
@@ -37,15 +38,12 @@ function hourTs() {
 
 async function activateOnFirstConnect(user) {
   if (user.first_connected_at) return;
-  let expiresAt = user.expires_at;
-  if (user.duration_days && !expiresAt) {
-    expiresAt = new Date(Date.now() + Number(user.duration_days) * 86400000).toISOString();
-  }
   await db.query(
     `UPDATE vpn_users SET first_connected_at=now(), activation_status='activated',
-     expires_at=COALESCE(expires_at, $2::timestamptz), updated_at=now()
+     expires_at=CASE WHEN expires_at IS NULL AND duration_days IS NOT NULL
+       THEN now()+duration_days*interval '1 day' ELSE expires_at END, updated_at=now()
      WHERE id=$1 AND first_connected_at IS NULL`,
-    [user.id, expiresAt]
+    [user.id]
   );
 }
 
@@ -77,7 +75,7 @@ async function recordSession(session) {
       await client.query(`INSERT INTO usage_daily(user_id,usage_date,bytes) VALUES($1,$2,$3) ON CONFLICT(user_id,usage_date) DO UPDATE SET bytes=usage_daily.bytes+EXCLUDED.bytes`, [user.id, today, deltaTotal]);
       await client.query(`INSERT INTO usage_hourly(user_id,hour_ts,bytes) VALUES($1,$2,$3) ON CONFLICT(user_id,hour_ts) DO UPDATE SET bytes=usage_hourly.bytes+EXCLUDED.bytes`, [user.id, hour, deltaTotal]);
     }
-    await client.query(`UPDATE vpn_users SET last_seen_at=now(), provisioning_status='active', provisioning_error=NULL, last_public_ip=$1::inet, last_virtual_ip=CASE WHEN $2='' THEN last_virtual_ip ELSE $2::inet END WHERE id=$3`, [session.remoteHost || null, session.virtualIp || '', user.id]);
+    await client.query(`UPDATE vpn_users SET last_seen_at=now(), last_public_ip=$1::inet, last_virtual_ip=CASE WHEN $2='' THEN last_virtual_ip ELSE $2::inet END WHERE id=$3`, [session.remoteHost || null, session.virtualIp || '', user.id]);
   });
 }
 
@@ -158,6 +156,10 @@ async function tick() {
   if (running) return;
   running = true;
   try {
+    try { await collectXrayUsage(); } catch (error) {
+      console.error('[xray usage]', error.message);
+      await stopXray().catch((e) => console.error('[xray stop]', e.message));
+    }
     const sessions = parseSas(await rawSas());
     lastSessions = sessions;
     for (const s of sessions) await recordSession(s);

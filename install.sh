@@ -83,7 +83,7 @@ apt-get update -qq
 apt-get install -y --no-install-recommends \
   postgresql postgresql-client strongswan strongswan-pki strongswan-swanctl strongswan-starter \
   libcharon-extra-plugins libcharon-extauth-plugins libstrongswan-extra-plugins libstrongswan-standard-plugins \
-  nginx rsync openssl curl python3 certbot python3-certbot-nginx dnsutils >/dev/null
+  nginx rsync openssl curl python3 python3-cryptography certbot python3-certbot-nginx dnsutils >/dev/null
 
 # 4. Ensure Node.js 20+
 if ! command -v node >/dev/null || [[ "$(node -v 2>/dev/null | cut -d. -f1 | tr -d 'v')" -lt 20 ]]; then
@@ -291,11 +291,7 @@ for plugin in eap-mschapv2 md4 des openssl fips-prf gmp; do
 done
 
 # 11. Sudoers Permissions for helper
-cat > /etc/sudoers.d/zvpn-panel <<'SUDOERS'
-zvpn ALL=(root) NOPASSWD: /usr/local/sbin/zvpn-helper sync-secrets, /usr/local/sbin/zvpn-helper reread-secrets, /usr/local/sbin/zvpn-helper list-sas, /usr/local/sbin/zvpn-helper terminate *, /usr/local/sbin/zvpn-helper status, /usr/local/sbin/zvpn-helper cert-info, /usr/local/sbin/zvpn-helper resolve-host *, /usr/local/sbin/zvpn-helper check-ike-ports, /usr/local/sbin/zvpn-helper endpoint-backup, /usr/local/sbin/zvpn-helper endpoint-rollback /var/lib/zvpn-panel/endpoint-backups/*, /usr/local/sbin/zvpn-helper issue-server-cert *, /usr/local/sbin/zvpn-helper set-leftid *, /usr/local/sbin/zvpn-helper normalize-conn, /usr/local/sbin/zvpn-helper strongswan-logs, /usr/local/sbin/zvpn-helper restart-strongswan
-SUDOERS
-chmod 440 /etc/sudoers.d/zvpn-panel
-visudo -cf /etc/sudoers.d/zvpn-panel >/dev/null
+bash "$APP/ops/install-helper-permissions.sh"
 
 # 12. Firewall & Routing
 sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
@@ -335,6 +331,8 @@ rm -f /etc/nginx/sites-enabled/default
 sed "s/__DOMAIN__/${DOMAIN}/g" "$APP/ops/nginx/zvpn.conf.template" > /etc/nginx/sites-available/zvpn-panel
 ln -sfn /etc/nginx/sites-available/zvpn-panel /etc/nginx/sites-enabled/zvpn-panel
 nginx -t >/dev/null 2>&1 || die "Nginx configuration test failed"
+
+bash "$APP/ops/install-xray.sh"
 
 # 16. Apply Speed & Kernel Network Optimization (BBR, MSS Clamping, Buffers)
 if [[ -f "$APP/ops/optimize-speed.sh" ]]; then

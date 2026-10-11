@@ -139,6 +139,13 @@ mkdir -p "$EXTRACT"
 tar -xzf "$ARCHIVE" -C "$EXTRACT"
 ok "Archive extracted"
 
+# New complete snapshots share the Telegram/local restoration path.
+if [[ -f "$EXTRACT/manifest.json" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  bash "$SCRIPT_DIR/restore-full-backup.sh" "$ARCHIVE" --yes
+  exit 0
+fi
+
 # ── Install ZVPN if not present ──────────────────────────────
 if [[ ! -f "$APP_DIR/backend/src/server.js" ]]; then
   info "ZVPN not installed — running fresh install first..."
@@ -287,6 +294,8 @@ iptables -t mangle -C FORWARD -p tcp -m tcp --tcp-flags SYN,RST SYN -j TCPMSS --
 [[ -f "$APP_DIR/ops/optimize-instagram.sh" ]] && bash "$APP_DIR/ops/optimize-instagram.sh" 2>/dev/null || true
 
 # ── Start services ────────────────────────────────────────────
+bash "$APP_DIR/ops/install-xray.sh"
+bash "$APP_DIR/ops/install-helper-permissions.sh"
 info "Starting all services..."
 systemctl daemon-reload
 systemctl restart postgresql                 2>/dev/null || true

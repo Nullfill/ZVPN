@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { config } from './config.js';
 import { decryptSecret } from './crypto.js';
 import { getVpnProfileConfig } from './services/vpnConfig.js';
+import { xrayLink } from './services/xrayConfig.js';
+import QRCode from 'qrcode';
 
 let caCache = null;
 async function caInfo() {
@@ -298,6 +300,14 @@ export async function downloadPageHtml(user, links, settings) {
   const username = htmlEsc(user.username);
   const server = htmlEsc(vpn.serverAddress);
   const remoteId = htmlEsc(vpn.remoteId || vpn.serverAddress);
+  let xray = null;
+  let qr = null;
+  if (settings?.xray?.enabled !== false && user.xray_uuid) {
+    try {
+      xray = xrayLink(user, config.publicBaseUrl);
+      qr = await QRCode.toDataURL(xray, { width: 240, margin: 2 });
+    } catch { /* TLS has not been configured yet; never advertise insecure links. */ }
+  }
 
   return `<!doctype html>
 <html lang="fa" dir="rtl">
@@ -384,6 +394,16 @@ a.btn.alt{background:rgba(255,255,255,.1)}a.btn span{font-size:.78rem;opacity:.8
       پروتکل: IKEv2 · EAP-MSCHAPv2
     </div>
   </div>
+
+  ${xray ? `<div class="card section">
+    <h2>اتصال Xray — VLESS</h2>
+    <p class="sub">اعتبار و حجم این اتصال با IKEv2 مشترک است. کانفیگ را در برنامه سازگار با XHTTP وارد کنید.</p>
+    <textarea id="xray-config" readonly dir="ltr" style="width:100%;min-height:100px;margin:14px 0;padding:12px;border-radius:12px;overflow-wrap:anywhere">${htmlEsc(xray)}</textarea>
+    <div class="btns"><button type="button" onclick="navigator.clipboard.writeText(document.getElementById('xray-config').value).then(()=>this.textContent='کپی شد').catch(()=>document.getElementById('xray-config').select())">کپی کانفیگ</button>
+    <a class="btn alt" href="${htmlEsc(links.landing)}/xray">دانلود کانفیگ</a>
+    <a class="btn alt" href="${htmlEsc(links.landing)}/xray-subscription">لینک اشتراک Xray</a></div>
+    <img src="${qr}" width="240" height="240" alt="QR کانفیگ Xray" style="display:block;margin:16px auto;border-radius:12px">
+  </div>` : ''}
 
   <div class="card section">
     <h2>دانلود نرم‌افزار و کانکشن</h2>

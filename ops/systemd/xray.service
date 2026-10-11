@@ -1,0 +1,19 @@
+[Unit]
+Description=ZVPN Xray Core
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=xray
+Group=xray
+ExecStart=/usr/local/bin/xray run -config /usr/local/etc/xray/config.json
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

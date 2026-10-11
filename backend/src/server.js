@@ -23,6 +23,8 @@ import { getLiveSessions, startWorker, disconnectUser } from './worker.js';
 import { disconnectIkeId } from './vpn.js';
 import { runMigrations } from './migrate.js';
 import { syncSecretsNow, syncStatus } from './services/syncQueue.js';
+import { xrayLink } from './services/xrayConfig.js';
+import { collectXrayUsage } from './services/xray.js';
 import { listUsers, getUserById, provisionUser, updateUser, extendUser, addTraffic, deleteUser, regenerateToken, revokeToken, getUserStats, downloadLinks, bulkUsers, resetActivation, resetUserPassword } from './services/users.js';
 import { getSettings, updateSettings, validateSettingsPatch, getSetting } from './services/settings.js';
 import { runGithubBackupNow, testGithubConnection, createGithubRepo, listGithubBackups, scheduleGithubBackup } from './services/githubBackup.js';
@@ -296,6 +298,7 @@ app.patch('/api/settings/:section', requireAdmin, adminOnly, asyncHandler(async 
     return apiError(res, 400, 'ENDPOINT_USE_WIZARD');
   }
   const updated = await updateSettings(section, parsed.data);
+  if (section === 'xray') await syncSecretsNow(60000);
   await audit(req.admin.id, 'settings.update', 'settings', section, parsed.data, clientIp(req));
   res.json({ settings: updated });
 }));
@@ -365,6 +368,19 @@ mountV211Routes(app, { requireAdmin, requireRole, audit, clientIp, asyncHandler 
 async function tokenUser(token) {
   return one(`SELECT * FROM vpn_users WHERE download_token=$1 AND download_token_revoked=false`, [token]);
 }
+
+app.get(['/d/:token/xray', '/d/:token/xray-subscription'], asyncHandler(async (req, res) => {
+  const user = await tokenUser(req.params.token);
+  if (!user) return res.status(404).send('Invalid link');
+  const settings = await getSetting('xray');
+  if (settings.enabled === false) return res.status(503).send('Xray is disabled');
+  const link = xrayLink(user, config.publicBaseUrl);
+  res.set('Cache-Control', 'no-store');
+  res.set('subscription-userinfo', `upload=${user.upload_bytes || 0}; download=${user.download_bytes || 0}; total=${user.unlimited_traffic ? 0 : user.total_limit_bytes || 0}; expire=${user.expires_at ? Math.floor(new Date(user.expires_at).getTime()/1000) : 0}`);
+  if (req.path.endsWith('/xray-subscription')) return res.type('text/plain').send(Buffer.from(link+'\n').toString('base64'));
+  res.set('Content-Disposition', 'attachment; filename="zvpn-xray.txt"');
+  return res.type('text/plain').send(link+'\n');
+}));
 
 app.get('/d/:token', asyncHandler(async (req, res) => {
   const u = await tokenUser(req.params.token);

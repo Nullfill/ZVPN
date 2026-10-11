@@ -111,12 +111,8 @@ chmod +x "$APP_DIR/ops/backup-github.sh" 2>/dev/null || true
 chmod +x "$APP_DIR/ops/restore-github.sh" 2>/dev/null || true
 
 # Configure sudoers for zvpn user
-cat << 'EOF' > /etc/sudoers.d/zvpn-panel
-zvpn ALL=(root) NOPASSWD: /usr/local/sbin/zvpn-helper, /usr/local/sbin/zvpn-helper *
-zvpn ALL=(root) NOPASSWD: /opt/zvpn-panel/app/ops/backup-github.sh, /opt/zvpn-panel/app/ops/backup-github.sh *
-EOF
-chmod 440 /etc/sudoers.d/zvpn-panel
-visudo -cf /etc/sudoers.d/zvpn-panel >/dev/null 2>&1 || true
+bash "$APP_DIR/ops/install-helper-permissions.sh"
+bash "$APP_DIR/ops/install-xray.sh"
 ok "Helper & sudoers updated"
 
 # ── Step 7: Start service ────────────────────────────────────

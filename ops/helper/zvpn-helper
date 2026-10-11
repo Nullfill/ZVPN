@@ -54,6 +54,20 @@ validate_identity() {
 }
 
 case "$ACTION" in
+  full-backup)
+    exec /usr/local/libexec/zvpn/full-backup.py
+    ;;
+  sync-xray)
+    exec /usr/local/libexec/zvpn/xray-apply.py
+    ;;
+  xray-epoch)
+    PID="$(systemctl show xray --property MainPID --value)"
+    if [[ "$PID" == 0 || ! -r "/proc/$PID/stat" ]]; then echo stopped; exit 0; fi
+    printf '%s:%s:%s\n' "$(cat /proc/sys/kernel/random/boot_id)" "$PID" "$(awk '{print $22}' /proc/$PID/stat)"
+    ;;
+  stop-xray)
+    systemctl stop xray
+    ;;
   sync-secrets)
     [[ -f "$RUNTIME_SECRETS" && ! -L "$RUNTIME_SECRETS" ]] || { echo "runtime secrets missing or unsafe" >&2; exit 3; }
     RUNTIME_REAL="$(realpath -e -- "$RUNTIME_SECRETS")"

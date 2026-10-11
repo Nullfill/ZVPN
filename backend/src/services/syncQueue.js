@@ -1,4 +1,6 @@
 import { syncSecrets as doSync } from '../vpn.js';
+import { syncXray } from './xray.js';
+import { db } from '../db.js';
 
 let pending = false;
 let running = false;
@@ -16,6 +18,8 @@ function enqueueSync() {
     running = true;
     try {
       await doSync();
+      await syncXray();
+      await db.query(`UPDATE vpn_users SET provisioning_status='active', provisioning_error=NULL WHERE provisioning_status IN ('provisioning','failed')`);
       lastError = null;
       lastSuccess = Date.now();
     } catch (e) {
@@ -39,11 +43,13 @@ export function queueSyncSecrets() {
 }
 
 /** Blocking sync for provisioning — with timeout */
-export async function syncSecretsNow(timeoutMs = 15000) {
-  return Promise.race([
-    enqueueSync(),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('sync timeout')), timeoutMs)),
-  ]);
+export async function syncSecretsNow(timeoutMs = 60000) {
+  let timer;
+  try {
+    return await Promise.race([enqueueSync(), new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('sync timeout')), timeoutMs);
+    })]);
+  } finally { clearTimeout(timer); }
 }
 
 export function syncStatus() {
