@@ -8,6 +8,7 @@ let lastError = null;
 let lastSuccess = null;
 let tail = Promise.resolve();
 let queued = 0;
+let retryTimer = null;
 
 function enqueueSync() {
   queued += 1;
@@ -22,9 +23,15 @@ function enqueueSync() {
       await db.query(`UPDATE vpn_users SET provisioning_status='active', provisioning_error=NULL WHERE provisioning_status IN ('provisioning','failed')`);
       lastError = null;
       lastSuccess = Date.now();
+      clearTimeout(retryTimer);
+      retryTimer = null;
     } catch (e) {
       lastError = e.message;
       console.error('[sync-queue]', e.message);
+      if (!retryTimer) retryTimer = setTimeout(() => {
+        retryTimer = null;
+        enqueueSync().catch(() => {});
+      }, 15000).unref();
       throw e;
     } finally {
       running = false;

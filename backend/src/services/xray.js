@@ -70,6 +70,7 @@ export async function syncXray() {
   await fs.writeFile(temp, json, { mode: 0o600 });
   await fs.rename(temp, XRAY_RUNTIME_CONFIG);
   try { await helper('sync-xray'); } catch (error) {
+    await helper('stop-xray').catch(() => {});
     await fs.rm(XRAY_RUNTIME_CONFIG, { force: true });
     throw error;
   }
