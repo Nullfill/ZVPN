@@ -9,8 +9,15 @@ if [[ -z "$VERSION" && -f /usr/local/etc/xray/version.json ]]; then
   VERSION="$(python3 -c 'import json; print(json.load(open("/usr/local/etc/xray/version.json"))["version"])')"
 fi
 if [[ -z "$VERSION" ]]; then
-  curl --fail --silent --show-error --location --retry 3 https://api.github.com/repos/XTLS/Xray-core/releases/latest -o "$WORK/release.json"
-  VERSION="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert not d["prerelease"] and not d["draft"]; print(d["tag_name"])' "$WORK/release.json")"
+  if curl --fail --silent --show-error --location --retry 3 https://api.github.com/repos/XTLS/Xray-core/releases/latest -o "$WORK/release.json"; then
+    VERSION="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert not d["prerelease"] and not d["draft"]; print(d["tag_name"])' "$WORK/release.json")"
+  else
+    # GitHub's official latest redirect also resolves the stable release and
+    # does not depend on the unauthenticated API rate limit of a shared IP.
+    RELEASE_URL="$(curl --fail --silent --show-error --location --retry 3 -o /dev/null \
+      -w '%{url_effective}' https://github.com/XTLS/Xray-core/releases/latest)"
+    VERSION="${RELEASE_URL##*/}"
+  fi
 fi
 [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Invalid Xray release tag' >&2; exit 1; }
 case "$(uname -m)" in

@@ -38,3 +38,5 @@ jobs:
       - run: npm ci --ignore-scripts && npm run build && npx tsc --noEmit
         working-directory: frontend
       - run: bash ops/tests/test-xray-core.sh
+        env:
+          GH_TOKEN: ${{ github.token }}

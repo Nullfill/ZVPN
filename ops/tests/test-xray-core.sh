@@ -6,7 +6,9 @@ PIDS=()
 cleanup() { for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done; rm -rf "$WORK"; }
 trap cleanup EXIT
 command -v nginx >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y nginx; }
-curl -fsSL --retry 3 https://api.github.com/repos/XTLS/Xray-core/releases/latest -o "$WORK/release.json"
+AUTH=()
+[[ -z "${GH_TOKEN:-}" ]] || AUTH=(-H "Authorization: Bearer $GH_TOKEN")
+curl -fsSL --retry 3 "${AUTH[@]}" https://api.github.com/repos/XTLS/Xray-core/releases/latest -o "$WORK/release.json"
 TAG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag_name"])' "$WORK/release.json")"
 curl -fsSL --retry 3 "https://github.com/XTLS/Xray-core/releases/download/$TAG/Xray-linux-64.zip" -o "$WORK/core.zip"
 curl -fsSL --retry 3 "https://github.com/XTLS/Xray-core/releases/download/$TAG/Xray-linux-64.zip.dgst" -o "$WORK/digest"
