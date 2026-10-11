@@ -38,6 +38,20 @@ fs.writeFileSync(root+'/client.json',JSON.stringify({
       xhttpSettings:{path:'/zvpn-xhttp/',mode:'packet-up'}}}],log:{loglevel:'debug'}}));
 JS
 "$WORK/xray" run -test -config "$WORK/server.json"
+# Exercise the production helper with an extensionless temporary file too.
+python3 - "$WORK" <<'PY'
+import importlib.util,pathlib,sys
+root=pathlib.Path(sys.argv[1])
+spec=importlib.util.spec_from_file_location('xray_apply','ops/helper/xray-apply.py')
+helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)
+probe=root/'helper-config-probe';probe.write_bytes((root/'empty.json').read_bytes())
+helper.test_config(str(root/'xray'),str(probe))
+probe.write_text('{invalid json')
+try: helper.test_config(str(root/'xray'),str(probe))
+except RuntimeError as error:
+    assert 'Xray configuration validation failed:' in str(error)
+else: raise AssertionError('Invalid configuration was accepted')
+PY
 "$WORK/xray" run -config "$WORK/server.json" > "$WORK/server.log" 2>&1 &
 CORE_PID=$!;PIDS+=("$CORE_PID")
 cat > "$WORK/nginx.conf" <<EOF

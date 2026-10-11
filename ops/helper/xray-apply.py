@@ -25,6 +25,14 @@ def validate(data):
         seen.add(user['id'])
     return data
 
+def test_config(binary, path):
+    # Temporary filenames must not determine the parser used for trusted JSON.
+    result=subprocess.run([binary,'run','-test','-format','json','-config',path],
+                          capture_output=True,text=True)
+    if result.returncode:
+        raise RuntimeError('Xray configuration validation failed: '+
+                           (result.stdout+result.stderr).strip())
+
 def main():
     source=pathlib.Path('/opt/zvpn-panel/runtime/xray.json')
     fd=os.open(source,os.O_RDONLY|os.O_NOFOLLOW)
@@ -33,10 +41,10 @@ def main():
         assert info.st_uid == pwd.getpwnam('zvpn').pw_uid and info.st_mode & 0o077 == 0
         assert info.st_size < 32*1024*1024
         data=validate(json.load(file))
-    with tempfile.NamedTemporaryFile(mode='w',dir='/usr/local/etc/xray',delete=False) as file:
+    with tempfile.NamedTemporaryFile(mode='w',suffix='.json',dir='/usr/local/etc/xray',delete=False) as file:
         json.dump(data,file); temp=file.name
     try:
-        subprocess.run(['/usr/local/bin/xray','run','-test','-config',temp],check=True,stdout=subprocess.DEVNULL)
+        test_config('/usr/local/bin/xray',temp)
         os.chown(temp,0,pwd.getpwnam('xray').pw_gid);os.chmod(temp,0o640)
         os.replace(temp,'/usr/local/etc/xray/config.json')
         subprocess.run(['systemctl','restart','xray'],check=True)
