@@ -64,6 +64,8 @@ def restore(root):
     if database.hostname not in ('127.0.0.1','localhost') or database.port not in (None,5432):
         raise ValueError('Automatic restore requires a local PostgreSQL database')
     username,password,dbname=unquote(database.username),unquote(database.password),unquote(database.path[1:])
+    if not dbname or dbname in ('postgres','template0','template1'):
+        raise ValueError('Refusing to replace a PostgreSQL system database')
     domain=urlparse(module.env_value(text,'PUBLIC_BASE_URL')).hostname
     if not shutil.which('node') or not shutil.which('nginx') or not shutil.which('psql') or not pathlib.Path('/usr/local/sbin/zvpn-helper').exists():
         env=os.environ.copy();env.update(ZVPN_NON_INTERACTIVE='1',ZVPN_DOMAIN=domain,
@@ -77,8 +79,10 @@ def restore(root):
     literal=lambda value:"'"+value.replace("'","''")+"'"
     sql=f"DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname={literal(username)}) THEN CREATE ROLE {ident(username)} LOGIN; END IF; END $$; ALTER ROLE {ident(username)} WITH PASSWORD {literal(password)};"
     run(['runuser','-u','postgres','--','psql','-v','ON_ERROR_STOP=1'],input=sql.encode(),stdout=subprocess.DEVNULL)
-    exists=subprocess.check_output(['runuser','-u','postgres','--','psql','-tAc',f'SELECT 1 FROM pg_database WHERE datname={literal(dbname)}']).strip()
-    if exists != b'1': run(['runuser','-u','postgres','--','createdb','--owner',username,dbname])
+    # The operator has explicitly confirmed replacement of this panel database.
+    # A clean DB avoids stale accounts and extensions owned by the old installer.
+    run(['runuser','-u','postgres','--','dropdb','--if-exists','--force','--',dbname])
+    run(['runuser','-u','postgres','--','createdb','--owner',username,'--',dbname])
     run(['runuser','-u','postgres','--','psql','-d',dbname,'-v','ON_ERROR_STOP=1'],
         input=(f'SET ROLE {ident(username)};\n'.encode()+gzip.decompress((root/'database.sql.gz').read_bytes())),stdout=subprocess.DEVNULL)
     for name,destination in [('ipsec.d','/etc/ipsec.d'),('letsencrypt','/etc/letsencrypt'),
