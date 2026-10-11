@@ -30,7 +30,10 @@ jobs:
         working-directory: backend
         env:
           TEST_DATABASE_URL: postgres://postgres:test-only-password@127.0.0.1:5432/zvpn_test
+      - run: sudo apt-get update -qq && sudo apt-get install -y postgresql-client-16
       - run: python3 -m unittest discover -s ops/tests -v
+        env:
+          TEST_DATABASE_URL: postgres://postgres:test-only-password@127.0.0.1:5432/zvpn_test
       - run: bash ops/tests/check-shell.sh
       - run: npm ci --ignore-scripts && npm run build && npx tsc --noEmit
         working-directory: frontend

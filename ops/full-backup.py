@@ -68,7 +68,7 @@ def collect(destination):
         src = Path('/etc/systemd/system') / name
         if src.is_file(): shutil.copy2(src, systemd / name)
     # Source required for restoration if the release branch later changes.
-    for name in ('backend/src', 'frontend/dist', 'ops', 'backend/package.json',
+    for name in ('backend/src', 'backend/scripts', 'frontend/dist', 'ops', 'backend/package.json',
                  'backend/package-lock.json', 'frontend/package.json','frontend/package-lock.json',
                  'frontend/src','frontend/index.html','frontend/vite.config.ts','frontend/tsconfig.json',
                  'frontend/tailwind.config.js','frontend/postcss.config.js',

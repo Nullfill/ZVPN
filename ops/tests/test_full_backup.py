@@ -1,10 +1,48 @@
-import gzip,hashlib,importlib.util,io,json,pathlib,tarfile,tempfile,unittest
+import gzip,hashlib,importlib.util,io,json,os,pathlib,shutil,tarfile,tempfile,unittest
+from unittest.mock import patch
 
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location('restore',ROOT/'ops/restore-full-backup.py')
 restore=importlib.util.module_from_spec(spec);spec.loader.exec_module(restore)
 
 class FullBackupTests(unittest.TestCase):
+    @unittest.skipUnless(os.environ.get('TEST_DATABASE_URL') and shutil.which('pg_dump'), 'requires PostgreSQL client and test database')
+    def test_collector_dumps_database_and_copies_current_certificates(self):
+        spec=importlib.util.spec_from_file_location('collector',ROOT/'ops/full-backup.py')
+        collector=importlib.util.module_from_spec(spec);spec.loader.exec_module(collector)
+        with tempfile.TemporaryDirectory() as folder:
+            root=pathlib.Path(folder); fixture=root/'fixture';app=fixture/'opt/zvpn-panel/app'
+            def mapped(value):
+                text=str(value)
+                return fixture/text.lstrip('/') if text.startswith(('/etc/','/opt/')) else pathlib.Path(value)
+            files={
+                'opt/zvpn-panel/app/backend/.env':f'DATABASE_URL={os.environ["TEST_DATABASE_URL"]}\nPUBLIC_BASE_URL=https://vpn.example.com\nMASTER_KEY=fixture-only\n'.encode(),
+                'etc/ipsec.conf':b'unchanged IKE config', 'etc/ipsec.secrets':b'unchanged secret',
+                'etc/ipsec.d/cacerts/ikev2-ca-cert.pem':b'unchanged CA certificate',
+                'etc/ipsec.d/private/ikev2-ca-key.pem':b'unchanged CA key',
+                'etc/ipsec.d/certs/ikev2-server-cert.pem':b'unchanged server certificate',
+                'etc/ipsec.d/private/ikev2-server-key.pem':b'unchanged server key',
+                'etc/letsencrypt/archive/vpn.example.com/privkey1.pem':b'unchanged SSL key',
+                'etc/nginx/sites-available/zvpn-panel':b'original HTTPS site',
+            }
+            for name,data in files.items():
+                file=fixture/name;file.parent.mkdir(parents=True,exist_ok=True);file.write_bytes(data)
+            link=fixture/'etc/letsencrypt/live/vpn.example.com/privkey.pem';link.parent.mkdir(parents=True)
+            link.symlink_to('../../archive/vpn.example.com/privkey1.pem')
+            link=fixture/'etc/nginx/sites-enabled/zvpn-panel';link.parent.mkdir(parents=True)
+            link.symlink_to(fixture/'etc/nginx/sites-available/zvpn-panel')
+            (app/'backend/scripts').mkdir(parents=True)
+            shutil.copy2(ROOT/'backend/scripts/create-admin.js',app/'backend/scripts/create-admin.js')
+            output=root/'snapshot'
+            with patch.object(collector,'APP',app),patch.object(collector,'Path',mapped):collector.collect(output)
+            restore.verify_snapshot(output)
+            for name,data in files.items():
+                target='panel.env' if name.endswith('/.env') else name.removeprefix('etc/')
+                self.assertEqual((output/target).read_bytes(),data)
+            self.assertIn(b'PostgreSQL database dump',gzip.decompress((output/'database.sql.gz').read_bytes()))
+            self.assertTrue((output/'app-source/backend/scripts/create-admin.js').is_file())
+            self.assertFalse((output/'nginx/sites-enabled/zvpn-panel').readlink().is_absolute())
+
     def snapshot(self):
         files={
             'panel.env':b'MASTER_KEY=preserved-original-key\nPUBLIC_BASE_URL=https://vpn.example.com\n',

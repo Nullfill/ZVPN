@@ -29,6 +29,12 @@ check "strongSwan PKI tool" "command -v pki >/dev/null" 1
 check "Panel backend service" "systemctl is-active --quiet zvpn-panel" 3
 check "Backend health API" "curl -fsS http://127.0.0.1:3300/api/health" 5
 check "Nginx config" "nginx -t" 1
+if [[ -x /usr/local/bin/xray ]]; then
+  check "Xray configuration" "/usr/local/bin/xray run -test -config /usr/local/etc/xray/config.json" 3
+  check "Xray service" "systemctl is-active --quiet xray" 5
+  check "Xray statistics API" "/usr/local/bin/xray api statsquery --server=127.0.0.1:10086 -pattern 'user>>>'" 2
+  check "Xray HTTPS route" "grep -q 'include /etc/nginx/zvpn-xray.inc;' /etc/nginx/sites-available/zvpn-panel" 1
+fi
 check "PostgreSQL" "systemctl is-active --quiet postgresql" 2
 check "Runtime secrets (panel rw)" "sudo -u zvpn test -r /opt/zvpn-panel/runtime/ipsec-users.secrets && sudo -u zvpn test -w /opt/zvpn-panel/runtime/ipsec-users.secrets" 1
 check "strongSwan secrets 600 root" "test \"$(stat -c '%U:%G:%a' /etc/ipsec.d/zvpn-users.secrets 2>/dev/null)\" = 'root:root:600'" 1

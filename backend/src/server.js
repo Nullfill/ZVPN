@@ -24,7 +24,6 @@ import { disconnectIkeId } from './vpn.js';
 import { runMigrations } from './migrate.js';
 import { syncSecretsNow, syncStatus } from './services/syncQueue.js';
 import { xrayLink } from './services/xrayConfig.js';
-import { collectXrayUsage } from './services/xray.js';
 import { listUsers, getUserById, provisionUser, updateUser, extendUser, addTraffic, deleteUser, regenerateToken, revokeToken, getUserStats, downloadLinks, bulkUsers, resetActivation, resetUserPassword } from './services/users.js';
 import { getSettings, updateSettings, validateSettingsPatch, getSetting } from './services/settings.js';
 import { runGithubBackupNow, testGithubConnection, createGithubRepo, listGithubBackups, scheduleGithubBackup } from './services/githubBackup.js';

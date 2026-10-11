@@ -161,6 +161,19 @@ if command -v nginx >/dev/null && nginx -t >/dev/null 2>&1; then
   systemctl reload nginx 2>/dev/null || true
 fi
 
+# Startup sync provisions every eligible existing account after migration 008.
+info "Waiting for existing users to synchronize with Xray..."
+XRAY_READY=0
+for attempt in {1..30}; do
+  if systemctl is-active --quiet xray && [[ -s /usr/local/etc/xray/config.json ]]; then
+    XRAY_READY=1
+    break
+  fi
+  sleep 2
+done
+[[ "$XRAY_READY" == 1 ]] || die "Xray provisioning failed; inspect zvpn-panel and xray service logs"
+ok "Existing user accounts synchronized with Xray; expiry and shared balance preserved"
+
 # ── Done ─────────────────────────────────────────────────────
 echo
 echo "─────────────────────────────────────────────"

@@ -16,28 +16,33 @@ p=pathlib.Path(sys.argv[1]);assert hashlib.sha256((p/'core.zip').read_bytes()).h
 with zipfile.ZipFile(p/'core.zip') as z:z.extract('xray',p)
 PY
 chmod +x "$WORK/xray"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=localhost \
+  -addext 'subjectAltName=DNS:localhost' -addext 'basicConstraints=critical,CA:FALSE' \
+  -keyout "$WORK/key.pem" -out "$WORK/cert.pem" >/dev/null 2>&1
 node --input-type=module - "$WORK" <<'JS'
 import fs from 'node:fs';
+import {createHash,X509Certificate} from 'node:crypto';
 import {buildXrayConfig} from './backend/src/services/xrayConfig.js';
 const root=process.argv[2];
+const pin=createHash('sha256').update(new X509Certificate(fs.readFileSync(root+'/cert.pem')).raw).digest('hex');
 const user={id:'11111111-1111-4111-8111-111111111111',xray_uuid:'22222222-2222-4222-8222-222222222222',enabled:true,quota_blocked:false};
 fs.writeFileSync(root+'/server.json',JSON.stringify(buildXrayConfig([user])));
 fs.writeFileSync(root+'/empty.json',JSON.stringify(buildXrayConfig([])));
 fs.writeFileSync(root+'/client.json',JSON.stringify({
   inbounds:[{listen:'127.0.0.1',port:11080,protocol:'socks',settings:{auth:'noauth',udp:false}}],
   outbounds:[{protocol:'vless',settings:{vnext:[{address:'127.0.0.1',port:15443,users:[{id:user.xray_uuid,encryption:'none'}]}]},
-    streamSettings:{network:'xhttp',security:'tls',tlsSettings:{serverName:'localhost',allowInsecure:true},
+    streamSettings:{network:'xhttp',security:'tls',tlsSettings:{serverName:'localhost',pinnedPeerCertSha256:pin},
       xhttpSettings:{path:'/zvpn-xhttp/',mode:'packet-up'}}}],log:{loglevel:'warning'}}));
 JS
 "$WORK/xray" run -test -config "$WORK/server.json"
 "$WORK/xray" run -config "$WORK/server.json" > "$WORK/server.log" 2>&1 &
 CORE_PID=$!;PIDS+=("$CORE_PID")
-openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=localhost -keyout "$WORK/key.pem" -out "$WORK/cert.pem" >/dev/null 2>&1
 cat > "$WORK/nginx.conf" <<EOF
 pid $WORK/nginx.pid;
 error_log $WORK/nginx.log;
 events { worker_connections 64; }
 http {
+  access_log off;
   client_body_temp_path $WORK/body;
   proxy_temp_path $WORK/proxy;
   server {
