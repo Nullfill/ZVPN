@@ -2,7 +2,7 @@
 
 پنل مدیریت IKEv2 / strongSwan و Xray برای مدیریت کاربران، نشست‌ها و سهمیه مشترک ترافیک روی سرورهای شخصی و چندسروره.
 
-[![Version](https://img.shields.io/badge/version-3.1.3-blue.svg)](https://github.com/Nullfill/ZVPN/releases)
+[![Version](https://img.shields.io/badge/version-3.1.4-blue.svg)](https://github.com/Nullfill/ZVPN/releases)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-green.svg)](https://nodejs.org/)
 [![strongSwan](https://img.shields.io/badge/strongSwan-5.9%2B-red.svg)](https://www.strongswan.org/)
 [![Database](https://img.shields.io/badge/PostgreSQL-14%2B-blue.svg)](https://www.postgresql.org/)

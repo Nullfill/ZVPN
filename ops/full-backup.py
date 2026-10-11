@@ -38,6 +38,7 @@ def collect(destination):
         'ipsec.d': Path('/etc/ipsec.d'), 'letsencrypt': Path('/etc/letsencrypt'),
         'nginx': Path('/etc/nginx'), 'xray': Path('/usr/local/etc/xray'),
         'runtime': Path('/opt/zvpn-panel/runtime'),
+        'legacy-public': Path('/opt/zvpn-panel/backend/public'),
     }
     if env_value(env.read_text(), 'PUBLIC_BASE_URL').startswith('https://'):
         tls = Path('/etc/letsencrypt/live')
@@ -68,7 +69,7 @@ def collect(destination):
         src = Path('/etc/systemd/system') / name
         if src.is_file(): shutil.copy2(src, systemd / name)
     # Source required for restoration if the release branch later changes.
-    for name in ('backend/src', 'backend/scripts', 'frontend/dist', 'ops', 'backend/package.json',
+    for name in ('backend/src', 'backend/scripts', 'backend/public', 'frontend/dist', 'ops', 'backend/package.json',
                  'backend/package-lock.json', 'frontend/package.json','frontend/package-lock.json',
                  'frontend/src','frontend/index.html','frontend/vite.config.ts','frontend/tsconfig.json',
                  'frontend/tailwind.config.js','frontend/postcss.config.js',

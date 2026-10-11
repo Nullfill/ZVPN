@@ -33,6 +33,8 @@ class FullBackupTests(unittest.TestCase):
             link.symlink_to(fixture/'etc/nginx/sites-available/zvpn-panel')
             (app/'backend/scripts').mkdir(parents=True)
             shutil.copy2(ROOT/'backend/scripts/create-admin.js',app/'backend/scripts/create-admin.js')
+            (app/'backend/public').mkdir(parents=True)
+            (app/'backend/public/ZVPN-Windows-Client.exe').write_bytes(b'original client download')
             output=root/'snapshot'
             with patch.object(collector,'APP',app),patch.object(collector,'Path',mapped):collector.collect(output)
             restore.verify_snapshot(output)
@@ -41,6 +43,7 @@ class FullBackupTests(unittest.TestCase):
                 self.assertEqual((output/target).read_bytes(),data)
             self.assertIn(b'PostgreSQL database dump',gzip.decompress((output/'database.sql.gz').read_bytes()))
             self.assertTrue((output/'app-source/backend/scripts/create-admin.js').is_file())
+            self.assertEqual((output/'app-source/backend/public/ZVPN-Windows-Client.exe').read_bytes(),b'original client download')
             self.assertFalse((output/'nginx/sites-enabled/zvpn-panel').readlink().is_absolute())
 
     def snapshot(self):
@@ -78,6 +81,18 @@ class FullBackupTests(unittest.TestCase):
             restore.safe_extract(data,folder)
             (pathlib.Path(folder)/'ipsec.d/private/ikev2-ca-key.pem').write_bytes(b'changed')
             with self.assertRaises(ValueError):restore.verify_snapshot(folder)
+
+    def test_restore_applies_both_network_optimizers_and_propagates_failure(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as folder:
+            app=pathlib.Path(folder);(app/'ops').mkdir()
+            names=('optimize-speed.sh','optimize-instagram.sh')
+            for name in names:(app/'ops'/name).write_text('# fixture')
+            with patch.object(restore,'run') as execute:
+                restore.apply_network_optimizations(app)
+                self.assertEqual(execute.call_args_list,[unittest.mock.call(['bash',str(app/'ops'/name)]) for name in names])
+            with patch.object(restore,'run',side_effect=subprocess.CalledProcessError(1,['bash'])):
+                with self.assertRaises(subprocess.CalledProcessError):restore.apply_network_optimizations(app)
 
     def test_extraction_refuses_paths_or_symlinks_outside_snapshot(self):
         for name,link in [('../outside',None),('link','/etc/passwd'),('link','../../outside')]:

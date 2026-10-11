@@ -51,6 +51,15 @@ def copy_tree(source,destination):
         pathlib.Path(destination).mkdir(parents=True,exist_ok=True)
         shutil.copytree(source,destination,symlinks=True,dirs_exist_ok=True)
 
+def apply_network_optimizations(app):
+    for name in ('optimize-speed.sh', 'optimize-instagram.sh'):
+        script=pathlib.Path(app)/'ops'/name
+        if script.is_file():
+            print('Applying network optimization: '+name,flush=True)
+            run(['bash',str(script)])
+        else:
+            print('Warning: snapshot lacks optional network optimizer '+name,flush=True)
+
 def restore(root):
     root=pathlib.Path(root)
     app=pathlib.Path('/opt/zvpn-panel/app')
@@ -71,6 +80,9 @@ def restore(root):
         env=os.environ.copy();env.update(ZVPN_NON_INTERACTIVE='1',ZVPN_DOMAIN=domain,
             ZVPN_DB_NAME=dbname,ZVPN_DB_USER=username)
         run(['bash',str(app/'install.sh')],env=env)
+    # Apply on both fresh and already-installed destinations, before restoring
+    # the source IKE configuration (optimizers may edit proposals and restart).
+    apply_network_optimizations(app)
     run(['systemctl','stop','zvpn-panel','strongswan-starter'])
     subprocess.run(['systemctl','stop','xray'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     shutil.copy2(root/'panel.env',app/'backend/.env')
@@ -89,6 +101,7 @@ def restore(root):
                              ('nginx','/etc/nginx'),('xray','/usr/local/etc/xray'),
                              ('runtime','/opt/zvpn-panel/runtime'),('systemd','/etc/systemd/system')]:
         copy_tree(root/name,destination)
+    copy_tree(root/'legacy-public','/opt/zvpn-panel/backend/public')
     for name in ('ipsec.conf','ipsec.secrets'): shutil.copy2(root/name,pathlib.Path('/etc')/name)
     # Never issue replacement certificates during restoration.
     for name in ('ipsec.d/cacerts/ikev2-ca-cert.pem','ipsec.d/certs/ikev2-server-cert.pem',
