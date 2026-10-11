@@ -1,7 +1,9 @@
 import { db } from './db.js';
 import { recordEvent } from './services/observability.js';
+import { scrubMetadata } from './logger.js';
 
 export async function audit(adminId, action, targetType = null, targetId = null, meta = {}, ip = null) {
+  meta = scrubMetadata(meta);
   try {
     await db.query(
       'INSERT INTO audit_logs(admin_id, action, target_type, target_id, meta, ip) VALUES($1,$2,$3,$4,$5::jsonb,$6::inet)',

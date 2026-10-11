@@ -16,24 +16,7 @@ trap 'rm -rf "$WORKDIR"' EXIT
 
 [[ -f "$ENV_FILE" ]] || { echo "ZVPN not found"; exit 1; }
 
-mkdir -p "$WORKDIR/ipsec.d/cacerts" "$WORKDIR/ipsec.d/certs" \
-         "$WORKDIR/ipsec.d/private" "$WORKDIR/letsencrypt" \
-         "$WORKDIR/nginx" "$WORKDIR/systemd" "$WORKDIR/runtime"
-
-cp -f "$ENV_FILE" "$WORKDIR/panel.env"                                    2>/dev/null || true
-cp -rf /etc/ipsec.d/cacerts/. "$WORKDIR/ipsec.d/cacerts/"                2>/dev/null || true
-cp -rf /etc/ipsec.d/certs/.   "$WORKDIR/ipsec.d/certs/"                  2>/dev/null || true
-cp -rf /etc/ipsec.d/private/. "$WORKDIR/ipsec.d/private/"                2>/dev/null || true
-cp -f  /etc/ipsec.conf        "$WORKDIR/ipsec.conf"                       2>/dev/null || true
-cp -f  /etc/ipsec.secrets     "$WORKDIR/ipsec.secrets"                    2>/dev/null || true
-cp -f  /etc/ipsec.d/zvpn-users.secrets "$WORKDIR/zvpn-users.secrets"     2>/dev/null || true
-cp -rf /etc/letsencrypt/.     "$WORKDIR/letsencrypt/"                     2>/dev/null || true
-cp -f  /etc/nginx/sites-available/zvpn-panel "$WORKDIR/nginx/"            2>/dev/null || true
-cp -f  /etc/systemd/system/zvpn-panel.service "$WORKDIR/systemd/"         2>/dev/null || true
-cp -rf /opt/zvpn-panel/runtime/. "$WORKDIR/runtime/"                      2>/dev/null || true
-
-DB_URL="$(grep '^DATABASE_URL=' "$ENV_FILE" | cut -d= -f2-)"
-pg_dump "$DB_URL" | gzip -9 > "$WORKDIR/database.sql.gz"
+python3 "$APP_DIR/ops/full-backup.py" --collect "$WORKDIR"
 
 chmod -R go-rwx "$WORKDIR"
 mkdir -p "$OUT"

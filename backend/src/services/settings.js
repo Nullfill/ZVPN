@@ -13,12 +13,14 @@ const DEFAULTS = {
   },
   appearance: { theme: 'dark', animations: true, threeJs: true, glassIntensity: 0.12 },
   download: { tokenDays: 30, pageTitle: '', supportText: '' },
+  xray: { enabled: true },
   telegram: {
     enabled: false,
     botToken: '',
     chatId: '',
     intervalHours: 1,
     includeAdmins: true,
+    passphrase: '',
     lastBackupAt: null,
     lastStatus: null,
     lastError: null,
@@ -36,6 +38,7 @@ const DEFAULTS = {
 };
 
 const SETTINGS_SCHEMAS = {
+  xray: z.object({ enabled: z.boolean().optional(), path: z.literal('/zvpn-xhttp/').optional() }).strict(),
   general: z.object({
     panelName: z.string().trim().min(1).max(80).optional(),
     timezone: z.string().trim().min(1).max(64).optional(),
@@ -64,6 +67,7 @@ const SETTINGS_SCHEMAS = {
     chatId: z.string().trim().max(64).optional(),
     intervalHours: z.coerce.number().int().min(1).max(168).optional(),
     includeAdmins: z.boolean().optional(),
+    passphrase: z.string().max(256).optional(),
     lastBackupAt: z.string().nullable().optional(),
     lastStatus: z.string().nullable().optional(),
     lastError: z.string().nullable().optional(),

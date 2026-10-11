@@ -16,7 +16,7 @@ UMask=0077
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=full
-ReadWritePaths=/opt/zvpn-panel/runtime /etc/ipsec.d /etc/ipsec.conf /etc/ipsec.secrets
+ReadWritePaths=/opt/zvpn-panel/runtime /etc/ipsec.d /etc/ipsec.conf /etc/ipsec.secrets /usr/local/etc/xray
 RestrictSUIDSGID=false
 
 [Install]

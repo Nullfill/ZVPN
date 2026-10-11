@@ -27,6 +27,7 @@ export function sanitizeUser(u, sessions = []) {
     totalLimitBytes: u.total_limit_bytes == null ? null : Number(u.total_limit_bytes),
     unlimitedTraffic: u.unlimited_traffic, maxDevices: u.max_devices,
     usageTotal: Number(u.usage_total), uploadBytes: Number(u.upload_bytes || 0), downloadBytes: Number(u.download_bytes || 0),
+    xrayUsageBytes: Number(u.xray_usage_bytes || 0),
     todayBytes: Number(u.today_bytes || 0),
     remainingTraffic: u.unlimited_traffic || !u.total_limit_bytes ? null : Math.max(0, Number(u.total_limit_bytes) - Number(u.usage_total)),
     remainingDays: u.expires_at ? Math.max(0, Math.ceil((new Date(u.expires_at) - Date.now()) / 86400000)) : null,

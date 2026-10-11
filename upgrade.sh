@@ -32,7 +32,18 @@ echo
 
 # ── Step 1: Pull latest code ────────────────────────────────
 info "Pulling latest code from GitHub..."
-git -C "$APP_DIR" pull origin main || die "git pull failed — check network / SSH keys"
+if [[ -d "$APP_DIR/.git" ]]; then
+  git -C "$APP_DIR" pull --ff-only origin main || die "git pull failed — check network / SSH keys"
+else
+  # Disaster-recovery archives carry exact source, without repository credentials.
+  # Re-establish the checkout on its first upgrade while preserving local secrets.
+  command -v git >/dev/null && command -v rsync >/dev/null || apt-get install -y git rsync
+  UPDATE_SOURCE="$(mktemp -d)"
+  trap 'rm -rf "$UPDATE_SOURCE"' EXIT
+  git clone --depth 1 --branch main https://github.com/Nullfill/ZVPN.git "$UPDATE_SOURCE/source"
+  rsync -a --exclude backend/.env --exclude backend/node_modules --exclude frontend/node_modules \
+    --exclude frontend/dist --exclude runtime/ "$UPDATE_SOURCE/source/" "$APP_DIR/"
+fi
 ok "Code updated"
 
 NEW_VERSION="$(cat "$APP_DIR/VERSION" 2>/dev/null || echo unknown)"
@@ -111,12 +122,8 @@ chmod +x "$APP_DIR/ops/backup-github.sh" 2>/dev/null || true
 chmod +x "$APP_DIR/ops/restore-github.sh" 2>/dev/null || true
 
 # Configure sudoers for zvpn user
-cat << 'EOF' > /etc/sudoers.d/zvpn-panel
-zvpn ALL=(root) NOPASSWD: /usr/local/sbin/zvpn-helper, /usr/local/sbin/zvpn-helper *
-zvpn ALL=(root) NOPASSWD: /opt/zvpn-panel/app/ops/backup-github.sh, /opt/zvpn-panel/app/ops/backup-github.sh *
-EOF
-chmod 440 /etc/sudoers.d/zvpn-panel
-visudo -cf /etc/sudoers.d/zvpn-panel >/dev/null 2>&1 || true
+bash "$APP_DIR/ops/install-helper-permissions.sh"
+bash "$APP_DIR/ops/install-xray.sh"
 ok "Helper & sudoers updated"
 
 # ── Step 7: Start service ────────────────────────────────────
@@ -164,6 +171,19 @@ done
 if command -v nginx >/dev/null && nginx -t >/dev/null 2>&1; then
   systemctl reload nginx 2>/dev/null || true
 fi
+
+# Startup sync provisions every eligible existing account after migration 008.
+info "Waiting for existing users to synchronize with Xray..."
+XRAY_READY=0
+for attempt in {1..30}; do
+  if systemctl is-active --quiet xray && [[ -s /usr/local/etc/xray/config.json ]]; then
+    XRAY_READY=1
+    break
+  fi
+  sleep 2
+done
+[[ "$XRAY_READY" == 1 ]] || die "Xray provisioning failed; inspect zvpn-panel and xray service logs"
+ok "Existing user accounts synchronized with Xray; expiry and shared balance preserved"
 
 # ── Done ─────────────────────────────────────────────────────
 echo

@@ -17,6 +17,7 @@ interface PanelSettings {
     chatId: string;
     intervalHours: number;
     includeAdmins: boolean;
+    passphrase: string;
     lastBackupAt: string | null;
     lastStatus: 'success' | 'error' | null;
     lastError: string | null;
@@ -48,6 +49,7 @@ export default function SettingsPage() {
     chatId: '',
     intervalHours: 1,
     includeAdmins: true,
+    passphrase: '',
   });
   const [testingTelegram, setTestingTelegram] = useState(false);
   const [sendingTelegramNow, setSendingTelegramNow] = useState(false);
@@ -87,6 +89,7 @@ export default function SettingsPage() {
         setTelegramForm({
           enabled: Boolean(data.settings.telegram.enabled),
           botToken: data.settings.telegram.botToken || '',
+          passphrase: data.settings.telegram.passphrase || '',
           chatId: data.settings.telegram.chatId || '',
           intervalHours: Number(data.settings.telegram.intervalHours || 1),
           includeAdmins: data.settings.telegram.includeAdmins ?? true,
@@ -459,7 +462,7 @@ export default function SettingsPage() {
                     </span>
                   </h3>
                   <p className="text-xs text-slate-400">
-                    ارسال خودکار فایل پشتیبان کامل (کاربران، پسوردها، سوابق مصرف و تنظیمات) به ربات یا کانال تلگرام
+                    بکاپ کامل سرور شامل کاربران، مصرف مشترک، تنظیمات Xray و همان گواهی‌ها و کلیدهای فعلی IKE و SSL
                   </p>
                 </div>
               </div>
@@ -534,14 +537,12 @@ export default function SettingsPage() {
                   </select>
                 </label>
 
-                <label className="flex items-center gap-2 pt-5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="rounded border-slate-700 bg-slate-800 text-sky-500 focus:ring-sky-500"
-                    checked={telegramForm.includeAdmins}
-                    onChange={(e) => setTelegramForm({ ...telegramForm, includeAdmins: e.target.checked })}
-                  />
-                  <span className="text-xs text-slate-300">شامل حساب‌های مدیران پنل (Full Backup)</span>
+                <label className="block">
+                  <span className="text-xs text-slate-300">رمز مستقل بکاپ (اختیاری)</span>
+                  <input type="password" className="input mt-1" autoComplete="new-password"
+                    value={telegramForm.passphrase}
+                    onChange={(e) => setTelegramForm({ ...telegramForm, passphrase: e.target.value })} />
+                  <span className="text-[11px] text-slate-400">رمز را خارج از سرور نگه دارید؛ بازیابی فایل رمزگذاری‌شده به آن نیاز دارد. بکاپ بدون رمز، کلیدهای خصوصی را نیز در خود دارد.</span>
                 </label>
               </div>
 

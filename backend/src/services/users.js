@@ -4,6 +4,7 @@ import { encryptSecret, randomPassword, randomToken } from '../crypto.js';
 import { syncSecretsNow, queueSyncSecrets } from './syncQueue.js';
 import { bytes, sanitizeUser, tokenExpiry } from '../utils/format.js';
 import { getLiveSessions, disconnectUser } from '../worker.js';
+import { collectXrayUsage } from './xray.js';
 
 export function getBaseUrl(req = null) {
   if (req) {
@@ -60,6 +61,7 @@ export async function provisionUser(data, req = null) {
 }
 
 export async function updateUser(id, data) {
+  if (data.resetUsage) await collectXrayUsage();
   const u = await one('SELECT * FROM vpn_users WHERE id=$1', [id]);
   if (!u) return null;
   await db.query(`UPDATE vpn_users SET enabled=COALESCE($1,enabled),
@@ -75,7 +77,7 @@ export async function updateUser(id, data) {
       Object.hasOwn(data, 'unlimitedTraffic'), Boolean(data.unlimitedTraffic), data.maxDevices ?? null, Object.hasOwn(data, 'note'), data.note ?? null,
       Boolean(data.resetUsage), id]);
   if (data.resetUsage) {
-    await db.query('UPDATE vpn_users SET usage_total=0, upload_bytes=0, download_bytes=0 WHERE id=$1', [id]);
+    await db.query('UPDATE vpn_users SET usage_total=0, xray_usage_bytes=0, upload_bytes=0, download_bytes=0 WHERE id=$1', [id]);
     await db.query('DELETE FROM usage_daily WHERE user_id=$1', [id]);
   }
   queueSyncSecrets();
@@ -101,6 +103,7 @@ export async function addTraffic(id, addBytes) {
 }
 
 export async function deleteUser(id) {
+  await collectXrayUsage();
   const u = await one('SELECT username FROM vpn_users WHERE id=$1', [id]);
   if (!u) return false;
   await disconnectUser(u.username);
