@@ -41,10 +41,8 @@ install -o root -g root -m 755 "$SOURCE_DIR/ops/full-backup.py" /usr/local/libex
 install -o root -g root -m 755 "$SOURCE_DIR/ops/helper/xray-apply.py" /usr/local/libexec/zvpn/xray-apply.py
 install -o root -g root -m 644 "$SOURCE_DIR/ops/systemd/xray.service" /etc/systemd/system/xray.service
 # The include is independent of Certbot changes to the existing server block.
-if ! grep -q 'include /etc/nginx/zvpn-xray.inc;' /etc/nginx/sites-available/zvpn-panel; then
-  sed -i '/server_name /a\    include /etc/nginx/zvpn-xray.inc;' /etc/nginx/sites-available/zvpn-panel
-fi
 install -o root -g root -m 644 "$SOURCE_DIR/ops/nginx/xray.inc" /etc/nginx/zvpn-xray.inc
+python3 "$SOURCE_DIR/ops/configure-xray-nginx.py"
 nginx -t
 systemctl daemon-reload
 systemctl enable xray

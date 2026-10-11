@@ -47,7 +47,7 @@ http {
   client_body_temp_path $WORK/body;
   proxy_temp_path $WORK/proxy;
   server {
-    listen 127.0.0.1:15443 ssl;
+    listen 127.0.0.1:15443 ssl http2;
     server_name localhost;
     ssl_certificate $WORK/cert.pem;
     ssl_certificate_key $WORK/key.pem;

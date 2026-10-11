@@ -360,6 +360,11 @@ if [[ "$DOMAIN" =~ [a-zA-Z] && ! "$DOMAIN" =~ ^[0-9.]+$ ]]; then
   fi
 fi
 
+# Certbot may have created the TLS server block after Xray installation.
+python3 "$APP/ops/configure-xray-nginx.py"
+nginx -t
+systemctl reload nginx
+
 sleep 2
 
 # 18. Health Check & Completion Banner

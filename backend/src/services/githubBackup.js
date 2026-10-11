@@ -1,13 +1,10 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import path from 'node:path';
-import fs from 'node:fs';
 import { getSetting, updateSettings } from './settings.js';
 import { config } from '../config.js';
+import { collectXrayUsage } from './xray.js';
 
 const execFileAsync = promisify(execFile);
-
-const BACKUP_SCRIPT = path.resolve('/opt/zvpn-panel/app/ops/backup-github.sh');
 
 export async function runGithubBackupNow() {
   const cfg = await getSetting('github');
@@ -19,20 +16,11 @@ export async function runGithubBackupNow() {
   const args = [cfg.token, cfg.repo, cfg.passphrase || ''];
 
   try {
-    let stdout = '';
-    try {
-      const res = await execFileAsync('sudo', [helperPath, 'backup-github', ...args], {
-        timeout: 5 * 60 * 1000,
-        maxBuffer: 10 * 1024 * 1024,
-      });
-      stdout = res.stdout;
-    } catch {
-      const res = await execFileAsync('sudo', [BACKUP_SCRIPT, ...args], {
-        timeout: 5 * 60 * 1000,
-        maxBuffer: 10 * 1024 * 1024,
-      });
-      stdout = res.stdout;
-    }
+    await collectXrayUsage();
+    const { stdout } = await execFileAsync('sudo', [helperPath, 'backup-github', ...args], {
+      timeout: 5 * 60 * 1000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
 
     const now = new Date().toISOString();
     await updateSettings('github', {
@@ -42,10 +30,10 @@ export async function runGithubBackupNow() {
     });
     return { ok: true, output: stdout };
   } catch (err) {
-    const errorMsg = (err.stderr || err.stdout || err.message || 'خطا در پشتیبان‌گیری').toString().trim().slice(0, 500);
-    const now = new Date().toISOString();
+    let errorMsg = (err.stderr || err.stdout || err.message || 'خطا در پشتیبان‌گیری').toString().trim();
+    for (const secret of [cfg.token, cfg.passphrase]) if (secret) errorMsg = errorMsg.replaceAll(secret, '[redacted]');
+    errorMsg = errorMsg.slice(0, 500);
     await updateSettings('github', {
-      lastBackupAt: now,
       lastStatus: 'error',
       lastError: errorMsg,
     });
