@@ -96,6 +96,8 @@ export default function UserDetailPage() {
           </div>
           <ProgressBar value={totalPct} />
           <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+            <div><span className="text-xs text-slate-400 block mb-1">مصرف Xray</span><p dir="ltr" className="font-mono text-cyan-400">{fmtBytes(u.xrayUsageBytes || 0)}</p></div>
+            <div><span className="text-xs text-slate-400 block mb-1">مصرف IKEv2</span><p dir="ltr" className="font-mono text-indigo-400">{fmtBytes(u.ikeUsageBytes || 0)}</p></div>
             <div>
               <span className="text-xs text-slate-400 block mb-1">مصرف روزانه</span>
               <p dir="ltr" className="font-mono text-xs font-semibold">{fmtBytes(u.todayBytes)} <span className="text-slate-500">/ {u.dailyLimitBytes ? fmtBytes(u.dailyLimitBytes) : '∞'}</span></p>
@@ -113,6 +115,7 @@ export default function UserDetailPage() {
               <p dir="ltr" className="font-mono text-xs text-indigo-400">↑ {fmtBytes(u.uploadBytes)}</p>
             </div>
           </div>
+          <p className="mt-3 text-xs text-slate-400">مصرف هر دو پروتکل از یک سهمیه مشترک کم می‌شود.</p>
         </GlassCard>
 
         <GlassCard>

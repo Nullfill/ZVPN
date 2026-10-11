@@ -14,6 +14,8 @@ interface DashboardResponse {
     todayBytes: number;
     monthBytes: number;
     bytes: number;
+    xrayBytes?: number;
+    ikeBytes?: number;
   };
   system?: {
     load?: number;
@@ -31,6 +33,7 @@ interface DashboardResponse {
     created_at: string;
   }>;
   sessions?: Array<unknown>;
+  xray?: { installed: boolean; enabled: boolean; service: string; version: string | null; meteringHealthy: boolean; lastUsageAt: string | null };
 }
 
 export default function DashboardPage() {
@@ -52,6 +55,8 @@ export default function DashboardPage() {
 
   const totals = data.totals || { users: 0, active: 0, expired: 0, online: 0, todayBytes: 0, monthBytes: 0, bytes: 0 };
   const system = data.system || {};
+  const xray = data.xray;
+  const xrayState = !xray ? 'نامشخص' : !xray.installed ? 'نصب نشده' : !xray.enabled ? 'غیرفعال در تنظیمات' : xray.service === 'active' ? 'فعال' : xray.service === 'unknown' ? 'نامشخص' : 'متوقف';
   const memUsed = system.memoryUsed || 0;
   const memTotal = system.memoryTotal || 1;
   const memPercent = Math.round((memUsed / memTotal) * 100);
@@ -63,7 +68,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title="داشبورد مدیریت ZVPN"
-        description="وضعیت اتصال‌ها، مصرف پهنای باند و سلامت سرور strongSwan."
+        description="مصرف مشترک کاربران و وضعیت سرویس‌های IKEv2 و Xray."
         action={
           <button className="btn-ghost" onClick={() => refetch()} disabled={isFetching}>
             به‌روزرسانی
@@ -97,6 +102,23 @@ export default function DashboardPage() {
           value={fmtBytes(totals.bytes)}
           sub="کل حجم دانلود و آپلود"
         />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <StatCard icon={Activity} label="مصرف Xray" value={fmtBytes(totals.xrayBytes || 0)} sub="از مجموع سهمیه مشترک کاربران" />
+        <StatCard icon={ShieldCheck} label="مصرف IKEv2" value={fmtBytes(totals.ikeBytes || 0)} sub="از مجموع سهمیه مشترک کاربران" />
+        <GlassCard className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-bold">وضعیت Xray</h2>
+            <span className={`status-pill ${xray?.enabled && xray.service === 'active' ? '' : 'text-amber-400'}`}>{xrayState}</span>
+          </div>
+          <p className="text-sm text-muted">نسخه هسته: <span dir="ltr">{xray?.version || 'نامشخص'}</span></p>
+          <p className={xray?.meteringHealthy ? 'text-sm text-emerald-400' : 'text-sm text-amber-400'}>
+            ثبت مصرف: {xray?.meteringHealthy ? 'سالم' : xray?.enabled && xray.service === 'active' ? 'منتظر دریافت آمار یا نیازمند بررسی' : 'در حال اجرا نیست'}
+          </p>
+          <p className="text-xs text-muted">آخرین دریافت آمار: {xray?.lastUsageAt ? fmtDate(xray.lastUsageAt) : 'هنوز دریافت نشده'}</p>
+          <p className="text-xs text-muted">مصرف تقریباً هر ۱۵ ثانیه ثبت می‌شود. تعداد نشست‌های زنده فقط مربوط به IKEv2 است.</p>
+        </GlassCard>
       </div>
 
       {/* System Health & Resources */}

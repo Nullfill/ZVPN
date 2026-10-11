@@ -91,6 +91,8 @@ export default function UsersPage() {
                 <span className="text-slate-500 text-[11px]">/ {u.totalLimitBytes ? fmtBytes(u.totalLimitBytes) : '∞'}</span>
               </div>
               {!!u.totalLimitBytes && <ProgressBar value={Number(u.usageTotal) / Number(u.totalLimitBytes) * 100} />}
+              <p className="text-[11px] text-slate-400">Xray: {fmtBytes(u.xrayUsageBytes || 0)}</p>
+              <p className="text-[11px] text-slate-400">IKEv2: {fmtBytes(u.ikeUsageBytes || 0)}</p>
             </div>
             <div>
               <div dir="ltr" className="flex items-baseline gap-1 font-mono text-xs">
@@ -99,7 +101,7 @@ export default function UsersPage() {
               </div>
             </div>
             <span className="text-xs">{u.remainingDays != null ? `${u.remainingDays} روز` : fmtDate(u.expiresAt)}</span>
-            <span className={u.online ? 'text-emerald-400' : 'text-slate-500'}>{u.online ? `${u.online} آنلاین` : 'آفلاین'}</span>
+            <span className={u.online ? 'text-emerald-400' : 'text-slate-500'} title="نشست‌های IKEv2؛ تعداد اتصال Xray در دسترس نیست">{u.online ? `${u.online} IKEv2` : 'IKEv2 آفلاین'}</span>
             <div className="flex gap-1">
               <button type="button" className="btn-ghost p-2" title="ویرایش" onClick={() => { setEditUser(u); setModal('edit'); }}><Settings size={16} /></button>
               <UserActions u={u} onReveal={setReveal} />

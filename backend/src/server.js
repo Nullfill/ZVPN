@@ -24,6 +24,7 @@ import { disconnectIkeId } from './vpn.js';
 import { runMigrations } from './migrate.js';
 import { syncSecretsNow, syncStatus } from './services/syncQueue.js';
 import { xrayLink } from './services/xrayConfig.js';
+import { getXrayStatus } from './services/xray.js';
 import { listUsers, getUserById, provisionUser, updateUser, extendUser, addTraffic, deleteUser, regenerateToken, revokeToken, getUserStats, downloadLinks, bulkUsers, resetActivation, resetUserPassword } from './services/users.js';
 import { getSettings, updateSettings, validateSettingsPatch, getSetting } from './services/settings.js';
 import { runGithubBackupNow, testGithubConnection, createGithubRepo, listGithubBackups, scheduleGithubBackup } from './services/githubBackup.js';
@@ -98,7 +99,8 @@ app.get('/api/dashboard', requireAdmin, asyncHandler(async (req, res) => {
   const [totals, today, month] = await Promise.all([
     one(`SELECT count(*)::int AS users, count(*) FILTER(WHERE enabled AND NOT quota_blocked AND (expires_at IS NULL OR expires_at>now()))::int AS active,
       count(*) FILTER(WHERE expires_at IS NOT NULL AND expires_at<=now())::int AS expired,
-      COALESCE(sum(usage_total),0)::bigint AS bytes FROM vpn_users`),
+      COALESCE(sum(usage_total),0)::bigint AS bytes,
+      COALESCE(sum(xray_usage_bytes),0)::bigint AS xray_bytes FROM vpn_users`),
     one(`SELECT COALESCE(sum(bytes),0)::bigint AS bytes FROM usage_daily WHERE usage_date=(now() AT TIME ZONE $1)::date`, [config.timezone]),
     one(`SELECT COALESCE(sum(bytes),0)::bigint AS bytes FROM usage_daily WHERE usage_date >= date_trunc('month', now() AT TIME ZONE $1)::date`, [config.timezone]),
   ]);
@@ -111,10 +113,11 @@ app.get('/api/dashboard', requireAdmin, asyncHandler(async (req, res) => {
   try { await execFileAsync('systemctl', ['is-active', 'strongswan-starter']); strongswan = 'active'; } catch { strongswan = 'inactive'; }
   const sessions = getLiveSessions();
   res.json({
-    totals: { ...totals, bytes: Number(totals.bytes), todayBytes: Number(today.bytes), monthBytes: Number(month.bytes), online: sessions.length },
+    totals: { ...totals, bytes: Number(totals.bytes), xrayBytes: Number(totals.xray_bytes),
+      ikeBytes: Math.max(0, Number(totals.bytes) - Number(totals.xray_bytes)), todayBytes: Number(today.bytes), monthBytes: Number(month.bytes), online: sessions.length },
     system: { load: os.loadavg()[0], memoryUsed: os.totalmem() - os.freemem(), memoryTotal: os.totalmem(), uptime: os.uptime(), disk, strongswan, cpuCount: os.cpus().length },
     recent: await many('SELECT username, last_seen_at, usage_total, created_at FROM vpn_users ORDER BY created_at DESC LIMIT 5'),
-    sessions, sync: syncStatus(),
+    sessions, sync: syncStatus(), xray: await getXrayStatus(),
   });
 }));
 

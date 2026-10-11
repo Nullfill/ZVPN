@@ -371,6 +371,9 @@ a.btn.alt{background:rgba(255,255,255,.1)}a.btn span{font-size:.78rem;opacity:.8
 
     <div class="usage">
       <h3>جزئیات مصرف</h3>
+      <div class="row"><span>مصرف Xray</span><span dir="ltr">${fmtPortalBytes(user.xray_usage_bytes || 0)}</span></div>
+      <div class="row"><span>مصرف IKEv2</span><span dir="ltr">${fmtPortalBytes(Math.max(0, totalUsed - Number(user.xray_usage_bytes || 0)))}</span></div>
+      <p class="muted">مصرف IKEv2 و Xray از یک سهمیه مشترک کم می‌شود.</p>
       <div class="row">
         <span>حجم کل</span>
         <span dir="ltr" style="unicode-bidi:isolate">${fmtPortalBytes(totalUsed)}${totalLimit ? ` / ${fmtPortalBytes(totalLimit)}` : ''}${totalRemain != null ? ` (باقی: ${fmtPortalBytes(totalRemain)})` : ''}</span>

@@ -12,6 +12,28 @@ const exec = promisify(execFile);
 export const XRAY_RUNTIME_CONFIG = '/opt/zvpn-panel/runtime/xray.json';
 let installed = false;
 let usageTail = Promise.resolve();
+let lastUsageAt = null;
+let usageFailed = false;
+
+export async function getXrayStatus() {
+  const settings = await getSetting('xray');
+  const available = await xrayAvailable();
+  let service = available ? 'unknown' : 'not_installed';
+  let version = null;
+  if (available) {
+    const results = await Promise.allSettled([
+      exec('systemctl', ['show', 'xray', '--property=ActiveState', '--value'], { timeout: 3000 }),
+      exec('/usr/local/bin/xray', ['version'], { timeout: 3000 }),
+    ]);
+    const state = results[0];
+    service = state.status === 'fulfilled' ? state.value.stdout.trim() || 'unknown' : 'unknown';
+    const release = results[1];
+    if (release.status === 'fulfilled') version = /^Xray\s+(\S+)/.exec(release.value.stdout)?.[1] || null;
+  }
+  return { installed: available, enabled: settings.enabled !== false, service, version,
+    lastUsageAt: lastUsageAt ? new Date(lastUsageAt).toISOString() : null,
+    meteringHealthy: service === 'active' && !usageFailed && lastUsageAt !== null && Date.now() - lastUsageAt < 45000 };
+}
 
 async function helper(action) {
   const { stdout } = await exec('sudo', [config.helper, action], { timeout: 45000, maxBuffer: 8 * 1024 * 1024 });
@@ -23,7 +45,7 @@ export async function xrayAvailable() {
 }
 
 export function collectXrayUsage() {
-  const job = usageTail.then(readXrayUsage);
+  const job = usageTail.then(readXrayUsage).catch((error) => { usageFailed = true; throw error; });
   usageTail = job.catch(() => {});
   return job;
 }
@@ -47,6 +69,8 @@ async function readXrayUsage() {
       await recordXrayCounters(client, id, counter, before, today, hour.toISOString());
     });
   }
+  lastUsageAt = Date.now();
+  usageFailed = false;
 }
 
 export async function syncXray() {

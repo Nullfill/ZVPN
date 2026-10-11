@@ -54,6 +54,8 @@ export interface VpnUser {
   unlimitedTraffic: boolean;
   maxDevices: number;
   usageTotal: number;
+  xrayUsageBytes: number;
+  ikeUsageBytes: number;
   uploadBytes: number;
   downloadBytes: number;
   todayBytes: number;
