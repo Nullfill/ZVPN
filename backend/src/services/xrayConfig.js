@@ -37,7 +37,7 @@ export function xrayLink(user, baseUrl) {
   if (url.protocol !== 'https:' || isIP(url.hostname)) throw new Error('XRAY_REQUIRES_HTTPS_DOMAIN');
   const id = xrayIdentity(user).id;
   const query = new URLSearchParams({ encryption: 'none', security: 'tls', sni: url.hostname,
-    type: 'xhttp', path: '/zvpn-xhttp/', mode: 'packet-up', alpn: 'h2,http/1.1' });
+    type: 'xhttp', path: '/zvpn-xhttp/', mode: 'packet-up', alpn: 'h2,http/1.1', fp: 'chrome' });
   return `vless://${id}@${url.hostname}:${url.port || 443}?${query}#${encodeURIComponent(`ZVPN ${user.username}`)}`;
 }
 

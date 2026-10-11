@@ -23,6 +23,7 @@ test('share link reuses HTTPS domain and rejects an insecure/IP-only endpoint', 
   const link = xrayLink(user,'https://vpn.example.com');
   assert.ok(link.startsWith(`vless://${user.xray_uuid}@vpn.example.com:443?`));
   assert.ok(link.includes('security=tls') && link.includes('type=xhttp'));
+  assert.ok(link.includes('fp=chrome'));
   assert.throws(()=>xrayLink(user,'http://vpn.example.com'));
   assert.throws(()=>xrayLink(user,'https://127.0.0.1'));
 });

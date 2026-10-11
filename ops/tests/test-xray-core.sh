@@ -32,7 +32,7 @@ fs.writeFileSync(root+'/empty.json',JSON.stringify(buildXrayConfig([])));
 fs.writeFileSync(root+'/client.json',JSON.stringify({
   inbounds:[{listen:'127.0.0.1',port:11080,protocol:'socks',settings:{auth:'noauth',udp:false}}],
   outbounds:[{protocol:'vless',settings:{vnext:[{address:'127.0.0.1',port:15443,users:[{id:user.xray_uuid,encryption:'none'}]}]},
-    streamSettings:{network:'xhttp',security:'tls',tlsSettings:{serverName:'localhost',pinnedPeerCertSha256:pin},
+    streamSettings:{network:'xhttp',security:'tls',tlsSettings:{serverName:'localhost',fingerprint:'chrome',pinnedPeerCertSha256:pin},
       xhttpSettings:{path:'/zvpn-xhttp/',mode:'packet-up'}}}],log:{loglevel:'debug'}}));
 JS
 "$WORK/xray" run -test -config "$WORK/server.json"
