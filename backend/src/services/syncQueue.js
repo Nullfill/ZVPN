@@ -1,5 +1,5 @@
 import { syncSecrets as doSync } from '../vpn.js';
-import { syncXray } from './xray.js';
+import { syncXray, stopXray, xrayAvailable } from './xray.js';
 import { db } from '../db.js';
 
 let pending = false;
@@ -27,6 +27,7 @@ function enqueueSync() {
       retryTimer = null;
     } catch (e) {
       lastError = e.message;
+      if (await xrayAvailable()) await stopXray().catch(() => {});
       console.error('[sync-queue]', e.message);
       if (!retryTimer) retryTimer = setTimeout(() => {
         retryTimer = null;

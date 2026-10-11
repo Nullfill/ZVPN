@@ -159,6 +159,7 @@ async function tick() {
     try { await collectXrayUsage(); } catch (error) {
       console.error('[xray usage]', error.message);
       await stopXray().catch((e) => console.error('[xray stop]', e.message));
+      queueSyncSecrets();
     }
     const sessions = parseSas(await rawSas());
     lastSessions = sessions;
