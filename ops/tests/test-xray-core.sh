@@ -26,13 +26,14 @@ import {buildXrayConfig} from './backend/src/services/xrayConfig.js';
 const root=process.argv[2];
 const pin=createHash('sha256').update(new X509Certificate(fs.readFileSync(root+'/cert.pem')).raw).digest('hex');
 const user={id:'11111111-1111-4111-8111-111111111111',xray_uuid:'22222222-2222-4222-8222-222222222222',enabled:true,quota_blocked:false};
-fs.writeFileSync(root+'/server.json',JSON.stringify(buildXrayConfig([user])));
+const server=buildXrayConfig([user]);server.log.loglevel='debug';
+fs.writeFileSync(root+'/server.json',JSON.stringify(server));
 fs.writeFileSync(root+'/empty.json',JSON.stringify(buildXrayConfig([])));
 fs.writeFileSync(root+'/client.json',JSON.stringify({
   inbounds:[{listen:'127.0.0.1',port:11080,protocol:'socks',settings:{auth:'noauth',udp:false}}],
   outbounds:[{protocol:'vless',settings:{vnext:[{address:'127.0.0.1',port:15443,users:[{id:user.xray_uuid,encryption:'none'}]}]},
     streamSettings:{network:'xhttp',security:'tls',tlsSettings:{serverName:'localhost',pinnedPeerCertSha256:pin},
-      xhttpSettings:{path:'/zvpn-xhttp/',mode:'packet-up'}}}],log:{loglevel:'warning'}}));
+      xhttpSettings:{path:'/zvpn-xhttp/',mode:'packet-up'}}}],log:{loglevel:'debug'}}));
 JS
 "$WORK/xray" run -test -config "$WORK/server.json"
 "$WORK/xray" run -config "$WORK/server.json" > "$WORK/server.log" 2>&1 &
@@ -60,7 +61,7 @@ node --input-type=module -e "import http from 'node:http'; http.createServer((q,
 PIDS+=("$!")
 "$WORK/xray" run -config "$WORK/client.json" > "$WORK/client.log" 2>&1 &
 PIDS+=("$!")
-for attempt in {1..20}; do
+for attempt in {1..5}; do
   if curl --fail --silent --show-error --max-time 10 --noproxy '' --socks5-hostname 127.0.0.1:11080 http://127.0.0.1:18080 > "$WORK/response"; then break; fi
   sleep 1
 done

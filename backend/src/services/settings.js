@@ -38,7 +38,7 @@ const DEFAULTS = {
 };
 
 const SETTINGS_SCHEMAS = {
-  xray: z.object({ enabled: z.boolean().optional() }).strict(),
+  xray: z.object({ enabled: z.boolean().optional(), path: z.literal('/zvpn-xhttp/').optional() }).strict(),
   general: z.object({
     panelName: z.string().trim().min(1).max(80).optional(),
     timezone: z.string().trim().min(1).max(64).optional(),

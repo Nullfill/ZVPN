@@ -8,4 +8,4 @@ CREATE TABLE IF NOT EXISTS xray_usage_snapshots (
   downlink bigint NOT NULL DEFAULT 0,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-INSERT INTO panel_settings(key,value) VALUES ('xray','{"enabled":true,"path":"/zvpn-xhttp/"}') ON CONFLICT(key) DO NOTHING;
+INSERT INTO panel_settings(key,value) VALUES ('xray','{"enabled":true}') ON CONFLICT(key) DO NOTHING;
