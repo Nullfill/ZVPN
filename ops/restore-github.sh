@@ -31,7 +31,25 @@ echo ""
 # ── Collect credentials ──────────────────────────────────────
 # Load from existing .env if available (re-install scenario)
 if [[ -f "$ENV_FILE" ]]; then
-  set -a; source "$ENV_FILE" 2>/dev/null || true; set +a
+  readarray -t SAVED_CONFIG < <(python3 - "$ENV_FILE" <<'PY'
+import base64,json,pathlib,sys
+values={}
+for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
+    key,sep,value=line.partition('=')
+    if sep:
+        value=value.strip()
+        if value.startswith('"'):
+            try:value=json.loads(value)
+            except ValueError:value=value.strip('"')
+        elif value.startswith("'"):value=value.strip("'")
+        values[key]=value
+for key in ('BACKUP_GITHUB_TOKEN','BACKUP_GITHUB_REPO','BACKUP_PASSPHRASE'):
+    print(base64.b64encode(values.get(key,'').encode()).decode())
+PY
+  )
+  BACKUP_GITHUB_TOKEN="${BACKUP_GITHUB_TOKEN:-$(printf '%s' "${SAVED_CONFIG[0]:-}" | base64 -d)}"
+  BACKUP_GITHUB_REPO="${BACKUP_GITHUB_REPO:-$(printf '%s' "${SAVED_CONFIG[1]:-}" | base64 -d)}"
+  BACKUP_PASSPHRASE="${BACKUP_PASSPHRASE:-$(printf '%s' "${SAVED_CONFIG[2]:-}" | base64 -d)}"
 fi
 
 GITHUB_TOKEN="${GITHUB_TOKEN:-${BACKUP_GITHUB_TOKEN:-}}"
@@ -47,6 +65,7 @@ if [[ -z "$GITHUB_REPO" ]]; then
   read -rp "Backup repo (e.g. YourUser/zvpn-backups): " GITHUB_REPO < /dev/tty
 fi
 [[ -n "$GITHUB_REPO" ]] || die "Backup repo is required"
+[[ "$GITHUB_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die 'Invalid backup repository'
 
 if [[ -z "$BACKUP_PASS" ]]; then
   read -rsp "Backup passphrase (empty if not encrypted): " BACKUP_PASS < /dev/tty; echo
@@ -96,6 +115,7 @@ RELEASE_NAME="$(echo "$LATEST" | jq -r '.name')"
 ASSET="$(echo "$LATEST" | jq -r '.assets[0]')"
 ASSET_API_URL="$(echo "$ASSET" | jq -r '.url')"
 ASSET_NAME="$(echo "$ASSET" | jq -r '.name')"
+[[ "$ASSET_NAME" =~ ^[A-Za-z0-9_-]+\.tar\.gz(\.enc)?$ ]] || die 'Invalid backup filename'
 ASSET_SIZE="$(echo "$ASSET" | jq -r '.size')"
 
 info "Restoring from: $RELEASE_NAME"
@@ -125,26 +145,35 @@ if [[ "$ASSET_NAME" == *.enc ]]; then
   [[ -n "$BACKUP_PASS" ]] || die "فایل رمزنگاری شده است و پسفراز وارد نشد."
   info "Decrypting..."
   ARCHIVE="$WORKDIR/zvpn-restore.tar.gz"
-  openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
-    -pass "pass:$BACKUP_PASS" \
+    export ZVPN_ARCHIVE_PASSWORD="$BACKUP_PASS"
+    openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+      -pass env:ZVPN_ARCHIVE_PASSWORD \
     -in "$WORKDIR/$ASSET_NAME" -out "$ARCHIVE" || die "Decryption failed — wrong passphrase?"
+    unset ZVPN_ARCHIVE_PASSWORD
   ok "Decrypted successfully"
 else
   ARCHIVE="$WORKDIR/$ASSET_NAME"
 fi
 
-# ── Extract ──────────────────────────────────────────────────
+# New snapshots can be recovered by the standalone download command too.
+if tar -tzf "$ARCHIVE" | grep -qE '^(\./)?manifest\.json$'; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || pwd)"
+  if [[ ! -f "$SCRIPT_DIR/restore-full-backup.sh" || ! -f "$SCRIPT_DIR/restore-full-backup.py" ]]; then
+    SCRIPT_DIR="$WORKDIR/restore-tools"
+    mkdir -p "$SCRIPT_DIR"
+    for file in restore-full-backup.sh restore-full-backup.py; do
+      curl -fsSL --retry 3 "https://raw.githubusercontent.com/Nullfill/ZVPN/main/ops/$file" -o "$SCRIPT_DIR/$file"
+    done
+  fi
+  bash "$SCRIPT_DIR/restore-full-backup.sh" "$ARCHIVE" --yes
+  exit 0
+fi
+
+# ── Extract legacy backups ───────────────────────────────────
 EXTRACT="$WORKDIR/extracted"
 mkdir -p "$EXTRACT"
 tar -xzf "$ARCHIVE" -C "$EXTRACT"
 ok "Archive extracted"
-
-# New complete snapshots share the Telegram/local restoration path.
-if [[ -f "$EXTRACT/manifest.json" ]]; then
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  bash "$SCRIPT_DIR/restore-full-backup.sh" "$ARCHIVE" --yes
-  exit 0
-fi
 
 # ── Install ZVPN if not present ──────────────────────────────
 if [[ ! -f "$APP_DIR/backend/src/server.js" ]]; then

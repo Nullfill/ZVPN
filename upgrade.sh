@@ -32,7 +32,18 @@ echo
 
 # ── Step 1: Pull latest code ────────────────────────────────
 info "Pulling latest code from GitHub..."
-git -C "$APP_DIR" pull origin main || die "git pull failed — check network / SSH keys"
+if [[ -d "$APP_DIR/.git" ]]; then
+  git -C "$APP_DIR" pull --ff-only origin main || die "git pull failed — check network / SSH keys"
+else
+  # Disaster-recovery archives carry exact source, without repository credentials.
+  # Re-establish the checkout on its first upgrade while preserving local secrets.
+  command -v git >/dev/null && command -v rsync >/dev/null || apt-get install -y git rsync
+  UPDATE_SOURCE="$(mktemp -d)"
+  trap 'rm -rf "$UPDATE_SOURCE"' EXIT
+  git clone --depth 1 --branch main https://github.com/Nullfill/ZVPN.git "$UPDATE_SOURCE/source"
+  rsync -a --exclude backend/.env --exclude backend/node_modules --exclude frontend/node_modules \
+    --exclude frontend/dist --exclude runtime/ "$UPDATE_SOURCE/source/" "$APP_DIR/"
+fi
 ok "Code updated"
 
 NEW_VERSION="$(cat "$APP_DIR/VERSION" 2>/dev/null || echo unknown)"

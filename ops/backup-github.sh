@@ -28,19 +28,39 @@ die(){  echo -e "${R}[ERROR]${N} $*" >&2; exit 1; }
 
 [[ -f "$ENV_FILE" ]] || die "ZVPN not installed — $ENV_FILE not found"
 
-# Load .env vars
-set -a; source "$ENV_FILE" 2>/dev/null || true; set +a
+# Read values as data; passwords containing $, quotes or | must never execute.
+readarray -t SAVED_CONFIG < <(python3 - "$ENV_FILE" <<'PY'
+import base64,json,pathlib,sys
+values={}
+for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
+    key,sep,value=line.partition('=')
+    if sep:
+        value=value.strip()
+        if value.startswith('"'):
+            try:value=json.loads(value)
+            except ValueError:value=value.strip('"')
+        elif value.startswith("'"):value=value.strip("'")
+        values[key]=value
+for key in ('BACKUP_GITHUB_TOKEN','BACKUP_GITHUB_REPO','BACKUP_PASSPHRASE'):
+    print(base64.b64encode(values.get(key,'').encode()).decode())
+PY
+)
 
 # Prefer arguments passed from CLI, then environment, then .env
-GITHUB_TOKEN="${1:-${BACKUP_GITHUB_TOKEN:-}}"
-GITHUB_REPO="${2:-${BACKUP_GITHUB_REPO:-}}"
-BACKUP_PASS="${3:-${BACKUP_PASSPHRASE:-}}"
+GITHUB_TOKEN="${1:-${BACKUP_GITHUB_TOKEN:-$(printf '%s' "${SAVED_CONFIG[0]:-}" | base64 -d)}}"
+GITHUB_REPO="${2:-${BACKUP_GITHUB_REPO:-$(printf '%s' "${SAVED_CONFIG[1]:-}" | base64 -d)}}"
+BACKUP_PASS="${3-${BACKUP_PASSPHRASE:-$(printf '%s' "${SAVED_CONFIG[2]:-}" | base64 -d)}}"
+[[ "$GITHUB_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die 'Invalid backup repository'
 
 # Sync to .env if passed from CLI
 if [[ -n "${1:-}" && -f "$ENV_FILE" ]]; then
-  grep -q '^BACKUP_GITHUB_TOKEN=' "$ENV_FILE" && sed -i "s|^BACKUP_GITHUB_TOKEN=.*|BACKUP_GITHUB_TOKEN=$GITHUB_TOKEN|" "$ENV_FILE" || echo "BACKUP_GITHUB_TOKEN=$GITHUB_TOKEN" >> "$ENV_FILE"
-  grep -q '^BACKUP_GITHUB_REPO=' "$ENV_FILE" && sed -i "s|^BACKUP_GITHUB_REPO=.*|BACKUP_GITHUB_REPO=$GITHUB_REPO|" "$ENV_FILE" || echo "BACKUP_GITHUB_REPO=$GITHUB_REPO" >> "$ENV_FILE"
-  grep -q '^BACKUP_PASSPHRASE=' "$ENV_FILE" && sed -i "s|^BACKUP_PASSPHRASE=.*|BACKUP_PASSPHRASE=$BACKUP_PASS|" "$ENV_FILE" || echo "BACKUP_PASSPHRASE=$BACKUP_PASS" >> "$ENV_FILE"
+  python3 - "$ENV_FILE" "$GITHUB_TOKEN" "$GITHUB_REPO" "$BACKUP_PASS" <<'PY'
+import json,pathlib,sys
+p=pathlib.Path(sys.argv[1]);names=('BACKUP_GITHUB_TOKEN','BACKUP_GITHUB_REPO','BACKUP_PASSPHRASE')
+lines=[line for line in p.read_text().splitlines() if line.partition('=')[0] not in names]
+lines += [key+'='+json.dumps(value,ensure_ascii=False) for key,value in zip(names,sys.argv[2:])]
+p.write_text('\n'.join(lines)+'\n')
+PY
 fi
 
 # ── Validate config ──────────────────────────────────────────
@@ -62,6 +82,11 @@ fi
 for cmd in curl jq pg_dump gzip tar openssl; do
   command -v "$cmd" &>/dev/null || { apt-get install -y -qq "$cmd" 2>/dev/null || die "Missing: $cmd"; }
 done
+
+# Complete snapshots contain private keys even when an admin forgets encryption.
+REPO_PRIVATE="$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$GITHUB_REPO" | jq -r '.private')"
+[[ "$REPO_PRIVATE" == true ]] || die 'Full backups require a private GitHub repository'
 
 TS="$(date +%Y%m%d-%H%M%S)"
 TAG="backup-$TS"
@@ -86,9 +111,11 @@ ok "Complete snapshot created and certificates verified"
 if [[ -n "$BACKUP_PASS" ]]; then
   info "Encrypting with AES-256-CBC..."
   ENC_FILE="$WORKDIR/zvpn-$TS.tar.gz.enc"
+  export ZVPN_ARCHIVE_PASSWORD="$BACKUP_PASS"
   openssl enc -aes-256-cbc -pbkdf2 -iter 600000 \
-    -pass "pass:$BACKUP_PASS" \
+    -pass env:ZVPN_ARCHIVE_PASSWORD \
     -in "$ARCHIVE" -out "$ENC_FILE"
+  unset ZVPN_ARCHIVE_PASSWORD
   UPLOAD_FILE="$ENC_FILE"
   UPLOAD_NAME="zvpn-$TS.tar.gz.enc"
   ok "Encrypted (passphrase protected)"
