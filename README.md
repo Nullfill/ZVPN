@@ -2,7 +2,7 @@
 
 پنل مدیریت IKEv2 / strongSwan و Xray برای مدیریت کاربران، نشست‌ها و سهمیه مشترک ترافیک روی سرورهای شخصی و چندسروره.
 
-[![Version](https://img.shields.io/badge/version-3.1.4-blue.svg)](https://github.com/Nullfill/ZVPN/releases)
+[![Version](https://img.shields.io/badge/version-3.1.5-blue.svg)](https://github.com/Nullfill/ZVPN/releases)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-green.svg)](https://nodejs.org/)
 [![strongSwan](https://img.shields.io/badge/strongSwan-5.9%2B-red.svg)](https://www.strongswan.org/)
 [![Database](https://img.shields.io/badge/PostgreSQL-14%2B-blue.svg)](https://www.postgresql.org/)
@@ -102,15 +102,17 @@ sudo bash upgrade.sh
 
 ---
 
-## 🚚 انتقال سرور بدون قطعی (Zero-Downtime Migration)
+## 🚚 انتقال کامل سرور
 
 برای انتقال کامل پنل از سرور **قدیمی** به سرور **جدید** — شامل دیتابیس، گواهی‌های ریشه CA، رمزنگاری‌ها و تنظیمات IKEv2 — بدون نیاز به دانلود مجدد پروفایل توسط کاربران:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Nullfill/ZVPN/main/ops/migrate-server.sh -o /tmp/migrate.sh && bash /tmp/migrate.sh
+curl -fsSL https://raw.githubusercontent.com/Nullfill/ZVPN/main/ops/migrate-server.sh -o /tmp/migrate.sh && bash /tmp/migrate.sh
 ```
 
 > دستور را **روی سرور قدیمی** به عنوان root اجرا کنید. اسکریپت از شما IP، پورت SSH و رمز عبور root سرور جدید را می‌خواهد و بقیه مراحل به صورت کاملاً خودکار انجام می‌شود.
+
+مهاجرت در هر اجرا از سرور فعلی یک آرشیو تازه می‌سازد؛ از بکاپ قدیمی GitHub یا تلگرام استفاده نمی‌کند. دیتابیس یک snapshot سازگار از زمان اجرای `pg_dump` است. مصرف و تغییرات روی مبدا پس از آن لحظه در مقصد نیست؛ این ابزار همگام‌سازی زنده یا انتقال اتصال‌های باز انجام نمی‌دهد. برای جلوگیری از اختلاف، هنگام انتقال نهایی فعالیت کاربران و مدیریت حساب‌ها روی مبدا باید متوقف شود. اتصال‌ها پس از تغییر DNS دوباره برقرار می‌شوند.
 
 **چه چیزی منتقل می‌شود؟**
 - ✅ دیتابیس کامل (کاربران، مصرف ترافیک، توکن‌ها، تاریخچه)
@@ -166,7 +168,7 @@ curl -sSL https://raw.githubusercontent.com/Nullfill/ZVPN/main/ops/optimize-inst
 │   ├── migrations/        # مایگریشن‌های دیتابیس
 │   ├── systemd/           # سرویس لینوکس zvpn-panel.service
 │   ├── nginx/             # تمپلیت Nginx Reverse Proxy
-│   ├── migrate-server.sh  # ابزار انتقال zero-downtime سرور
+│   ├── migrate-server.sh  # ابزار انتقال کامل سرور
 │   ├── optimize-speed.sh  # بهینه‌سازی پایه BBR و شبکه
 │   └── optimize-instagram.sh  # بهینه‌سازی اینستاگرام و شبکه‌های اجتماعی
 ├── docs/                  # مستندات معماری، استقرار، امنیت و عیب‌یابی

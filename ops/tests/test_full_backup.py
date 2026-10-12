@@ -75,6 +75,30 @@ class FullBackupTests(unittest.TestCase):
             self.assertEqual((pathlib.Path(folder)/'letsencrypt/live/vpn.example.com/privkey.pem').read_bytes(),
                              files['letsencrypt/archive/vpn.example.com/privkey1.pem'])
 
+    def test_copy_over_installed_tls_links_is_repeatable_and_preserves_original_keys(self):
+        data,files=self.snapshot()
+        with tempfile.TemporaryDirectory() as folder:
+            root=pathlib.Path(folder);snapshot=root/'snapshot';snapshot.mkdir()
+            restore.safe_extract(data,snapshot)
+            installed=root/'installed';live=installed/'live/vpn.example.com';live.mkdir(parents=True)
+            archive=installed/'archive/vpn.example.com';archive.mkdir(parents=True)
+            (archive/'privkey1.pem').write_bytes(b'fresh-install key')
+            (live/'privkey.pem').symlink_to('../../archive/vpn.example.com/privkey1.pem')
+            for _ in range(2):
+                restore.copy_tree(snapshot/'letsencrypt',installed)
+                self.assertEqual((live/'privkey.pem').readlink(),pathlib.Path('../../archive/vpn.example.com/privkey1.pem'))
+                self.assertEqual((live/'privkey.pem').read_bytes(),files['letsencrypt/archive/vpn.example.com/privkey1.pem'])
+
+    def test_copy_regular_file_does_not_follow_existing_destination_link(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=pathlib.Path(folder);source=root/'source';source.mkdir();target=root/'target';target.mkdir()
+            outside=root/'unrelated';outside.write_bytes(b'preserve this')
+            (source/'file').write_bytes(b'restored');(target/'file').symlink_to(outside)
+            restore.copy_tree(source,target)
+            self.assertEqual(outside.read_bytes(),b'preserve this')
+            self.assertFalse((target/'file').is_symlink())
+            self.assertEqual((target/'file').read_bytes(),b'restored')
+
     def test_missing_or_modified_private_key_is_a_failed_backup(self):
         data,_=self.snapshot()
         with tempfile.TemporaryDirectory() as folder:

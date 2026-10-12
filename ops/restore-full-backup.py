@@ -47,9 +47,23 @@ def run(args,**kw):
     return subprocess.run(args,check=True,**kw)
 
 def copy_tree(source,destination):
-    if source.exists():
-        pathlib.Path(destination).mkdir(parents=True,exist_ok=True)
-        shutil.copytree(source,destination,symlinks=True,dirs_exist_ok=True)
+    source,destination=pathlib.Path(source),pathlib.Path(destination)
+    if source.is_symlink():
+        if destination.is_dir() and not destination.is_symlink():
+            raise ValueError('Refusing to replace directory with symlink: '+str(destination))
+        if destination.exists() or destination.is_symlink(): destination.unlink()
+        destination.parent.mkdir(parents=True,exist_ok=True)
+        destination.symlink_to(os.readlink(source))
+    elif source.is_dir():
+        if destination.is_symlink(): destination.unlink()
+        destination.mkdir(parents=True,exist_ok=True)
+        for child in source.iterdir(): copy_tree(child,destination/child.name)
+        shutil.copystat(source,destination)
+    elif source.is_file():
+        # Do not follow a destination symlink while overwriting a regular file.
+        if destination.is_symlink(): destination.unlink()
+        destination.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy2(source,destination)
 
 def apply_network_optimizations(app):
     for name in ('optimize-speed.sh', 'optimize-instagram.sh'):
