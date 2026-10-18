@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, WifiOff, Search, AlertTriangle, ShieldAlert, ArrowDown, ArrowUp, Clock } from 'lucide-react';
+import { RefreshCw, WifiOff, Search, AlertTriangle, ShieldAlert, ArrowDown, ArrowUp, Clock, Users } from 'lucide-react';
 import { api, VpnSession } from '../lib/api';
 import { fmtBytes, fmtDate } from '../lib/format';
 import { EmptyState, GlassCard, Modal, PageHeader, SkeletonGrid, TableShell } from '../components/UI';
@@ -25,7 +25,7 @@ export default function SessionsPage() {
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['sessions'],
-    queryFn: () => api<{ sessions: VpnSession[] }>('/api/sessions'),
+    queryFn: () => api<{ sessions: VpnSession[]; onlineUsers: number; today: {uniqueUsers:number;date:string;timezone:string} }>('/api/sessions'),
     refetchInterval: 5_000,
   });
 
@@ -89,14 +89,23 @@ export default function SessionsPage() {
       />
 
       {/* Metrics Header */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <GlassCard className="flex items-center gap-3">
+          <div className="brand-mark"><Users size={20} /></div>
+          <div><p className="text-xs text-muted">کاربران آنلاین در کل امروز</p>
+            <p className="text-xl font-bold">{data?.today?.uniqueUsers ?? '—'} کاربر یکتا</p>
+            <p className="mt-1 text-xs text-muted">هر کاربر یک‌بار؛ از نیمه‌شب به وقت تهران</p>
+            <p className="mt-1 text-[11px] text-muted">IKEv2 و کاربران دارای مصرف Xray</p>
+          </div>
+        </GlassCard>
         <GlassCard className="flex items-center gap-3">
           <div className="brand-mark">
             <Clock size={20} />
           </div>
           <div>
-            <p className="text-xs text-muted">سشن‌های آنلاین</p>
-            <p className="text-xl font-bold">{sessions.length} کاربر فعال</p>
+            <p className="text-xs text-muted">آنلاین همین الان</p>
+            <p className="text-xl font-bold">{data?.onlineUsers ?? 0} کاربر فعال</p>
+            <p className="mt-1 text-xs text-muted">{sessions.length} نشست IKEv2</p>
           </div>
         </GlassCard>
 

@@ -1,3 +1,4 @@
+import { accountLifecycle } from './accountLifecycle.js';
 export function bytes(v) {
   return v == null || v === '' ? null : Math.max(0, Math.floor(Number(v)));
 }
@@ -7,9 +8,11 @@ export function tokenExpiry(days) {
 }
 
 export function userStatus(u) {
+  const lifecycle = accountLifecycle(u);
+  if (lifecycle.endedReason === 'date' || lifecycle.endedReason === 'date_and_traffic') return 'expired';
+  if (lifecycle.endedReason === 'traffic') return 'quota_total';
   if (!u.enabled) return 'disabled';
-  if (u.quota_blocked) return u.quota_reason === 'daily_quota' ? 'quota_daily' : u.quota_reason === 'total_quota' ? 'quota_total' : 'disabled';
-  if (u.expires_at && new Date(u.expires_at) <= new Date()) return 'expired';
+  if (!u.unlimited_traffic && Number(u.daily_limit_bytes)>0 && Number(u.today_bytes)>=Number(u.daily_limit_bytes)) return 'quota_daily';
   if (u.provisioning_status === 'provisioning') return 'provisioning';
   if (u.provisioning_status === 'failed' && !u.first_connected_at) return 'failed';
   if (u.activation_status === 'not_activated') return 'not_activated';
@@ -21,6 +24,7 @@ export function sanitizeUser(u, sessions = []) {
   const online = sessions.filter((s) => s.remoteId === u.username).length;
   return {
     id: u.id, username: u.username, enabled: u.enabled, status: userStatus(u),
+    ...accountLifecycle(u),
     activationStatus: u.activation_status, provisioningStatus: u.provisioning_status,
     provisioningError: u.provisioning_error, expiresAt: u.expires_at, durationDays: u.duration_days,
     firstConnectedAt: u.first_connected_at, dailyLimitBytes: u.daily_limit_bytes == null ? null : Number(u.daily_limit_bytes),

@@ -1,3 +1,4 @@
+import { recordDailyActivity } from './services/dailyActivity.js';
 import { db, many, one, tx } from './db.js';
 import { config } from './config.js';
 import { rawSas, parseSas, disconnectIkeId } from './vpn.js';
@@ -54,6 +55,7 @@ async function recordSession(session) {
   const today = localDate();
   const hour = hourTs();
   await tx(async (client) => {
+    await recordDailyActivity(client, user.id, today);
     const snap = await client.query('SELECT last_bytes, last_bytes_in, last_bytes_out FROM sa_snapshots WHERE ike_id=$1 FOR UPDATE', [session.ikeId]);
     const prev = snap.rows[0];
     const prevTotal = prev?.last_bytes;

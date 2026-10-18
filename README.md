@@ -2,7 +2,7 @@
 
 پنل مدیریت IKEv2 / strongSwan و Xray برای مدیریت کاربران، نشست‌ها و سهمیه مشترک ترافیک روی سرورهای شخصی و چندسروره.
 
-[![Version](https://img.shields.io/badge/version-3.1.5-blue.svg)](https://github.com/Nullfill/ZVPN/releases)
+[![Version](https://img.shields.io/badge/version-3.1.6-blue.svg)](https://github.com/Nullfill/ZVPN/releases)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-green.svg)](https://nodejs.org/)
 [![strongSwan](https://img.shields.io/badge/strongSwan-5.9%2B-red.svg)](https://www.strongswan.org/)
 [![Database](https://img.shields.io/badge/PostgreSQL-14%2B-blue.svg)](https://www.postgresql.org/)
@@ -182,3 +182,9 @@ curl -sSL https://raw.githubusercontent.com/Nullfill/ZVPN/main/ops/optimize-inst
 ## 📄 لایسنس (License)
 
 این پروژه تحت مجوز [MIT](LICENSE) منتشر شده است.
+
+## مدیریت کاربران و آمار روزانه — 3.1.6
+
+صفحه سشن‌ها کاربران یکتای امروز را از نیمه‌شب منطقه زمانی پنل می‌شمارد؛ چند اتصال یا استفاده از هر دو پروتکل، کاربر را دوباره حساب نمی‌کند. IKEv2 هنگام مشاهده اتصال و Xray هنگام ثبت مصرف شمارش می‌شود. آمار روزانه پس از قطع اتصال و ری‌استارت پنل باقی می‌ماند.
+
+صفحه کاربران خلاصه وضعیت، جستجوی نام/یادداشت، مرتب‌سازی، صفحه‌بندی و فیلتر پایان زمان/حجم دارد. حساب‌های بدون تمدید با حداقل ۷، ۱۴، ۳۰ یا ۶۰ روز از پایان اشتراک قابل بررسی‌اند. پایان سهمیه روزانه در این گروه نیست؛ هیچ حسابی خودکار حذف نمی‌شود. تاریخ پایان حجم از رویداد معتبر قبلی یا عبور جدید از سقف ثبت می‌شود؛ اگر تاریخ قدیمی معلوم نباشد، نامشخص نمایش داده می‌شود.

@@ -43,6 +43,11 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
 }
 
 export interface VpnUser {
+  ended: boolean;
+  endedReason: string | null;
+  endedAt: string | null;
+  endedDays: number | null;
+  stale: boolean;
   id: string;
   username: string;
   enabled: boolean;

@@ -1,3 +1,4 @@
+import { dailyActivitySummary } from './services/dailyActivity.js';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
@@ -159,9 +160,12 @@ app.get('/api/users', requireAdmin, asyncHandler(async (req, res) => {
   let users = await listUsers();
   const search = String(req.query.search || '').trim().toLowerCase();
   const status = String(req.query.status || '');
-  if (search) users = users.filter((u) => u.username.toLowerCase().includes(search));
+  if (search) users = users.filter((u) => `${u.username} ${u.note||''}`.toLowerCase().includes(search));
   if (status === 'online') users = users.filter((u) => u.online > 0);
-  else if (status === 'active') users = users.filter((u) => u.status === 'active');
+  else if (status === 'active') users = users.filter((u) => ['active','expiring_soon'].includes(u.status));
+  else if (status === 'ended') users = users.filter((u) => u.ended);
+  else if (status === 'stale') users = users.filter((u) => u.stale);
+  else if (status === 'quota_total') users = users.filter((u) => u.endedReason?.includes('traffic'));
   else if (status === 'disabled') users = users.filter((u) => u.status === 'disabled');
   else if (status === 'expired') users = users.filter((u) => u.status === 'expired');
   else if (status === 'not_activated') users = users.filter((u) => u.status === 'not_activated');
@@ -273,7 +277,10 @@ app.delete('/api/users/:id', requireAdmin, operatorOnly, requireUserId, asyncHan
   res.json({ ok: true });
 }));
 
-app.get('/api/sessions', requireAdmin, (_req, res) => res.json({ sessions: getLiveSessions() }));
+app.get('/api/sessions', requireAdmin, asyncHandler(async (_req, res) => {
+  const sessions=getLiveSessions();
+  res.json({sessions, onlineUsers:new Set(sessions.map(s=>s.remoteId).filter(Boolean)).size, today:await dailyActivitySummary(db,config.timezone)});
+}));
 app.delete('/api/sessions/:ikeId', requireAdmin, operatorOnly, asyncHandler(async (req, res) => {
   const ikeId = req.params.ikeId;
   await disconnectIkeId(ikeId);

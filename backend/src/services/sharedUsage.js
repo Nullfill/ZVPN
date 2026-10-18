@@ -1,3 +1,4 @@
+import { recordDailyActivity } from './dailyActivity.js';
 import { counterDelta } from './xrayConfig.js';
 
 export async function recordXrayCounters(client, id, counter, epoch, today, hour) {
@@ -11,6 +12,7 @@ export async function recordXrayCounters(client, id, counter, epoch, today, hour
   const download = counterDelta(counter.downlink, previous?.downlink, sameEpoch);
   const total = upload + download;
   if (total > 0n) {
+    await recordDailyActivity(client, id, today);
     // One shared balance. A second protocol never grants a second allowance.
     await client.query(`UPDATE vpn_users SET usage_total=usage_total+$2, xray_usage_bytes=xray_usage_bytes+$2,
       upload_bytes=upload_bytes+$3, download_bytes=download_bytes+$4, last_seen_at=now(),
