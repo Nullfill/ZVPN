@@ -27,6 +27,7 @@ import { syncSecretsNow, syncStatus } from './services/syncQueue.js';
 import { xrayLink } from './services/xrayConfig.js';
 import { getXrayStatus } from './services/xray.js';
 import { getWarpStatus, reconnectWarp } from './services/warp.js';
+import { GEMINI_DOMAINS } from './services/warpDefaults.js';
 import { listUsers, getUserById, provisionUser, updateUser, extendUser, addTraffic, deleteUser, regenerateToken, revokeToken, getUserStats, downloadLinks, bulkUsers, resetActivation, resetUserPassword } from './services/users.js';
 import { getSettings, updateSettings, validateSettingsPatch, getSetting } from './services/settings.js';
 import { runGithubBackupNow, testGithubConnection, createGithubRepo, listGithubBackups, scheduleGithubBackup } from './services/githubBackup.js';
@@ -301,6 +302,7 @@ app.get('/api/audit', requireAdmin, asyncHandler(async (_req, res) => {
 
 app.get('/api/settings', requireAdmin, asyncHandler(async (_req, res) => res.json({ settings: await getSettings() })));
 app.get('/api/warp/status', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json(await getWarpStatus())));
+app.get('/api/warp/presets', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json({ geminiDomains: GEMINI_DOMAINS })));
 app.get('/api/warp/users', requireAdmin, adminOnly, asyncHandler(async (_req, res) =>
   res.json({ users: await many('SELECT id, username FROM vpn_users ORDER BY username') })));
 app.post('/api/warp/reconnect', requireAdmin, adminOnly, asyncHandler(async (req, res) => {

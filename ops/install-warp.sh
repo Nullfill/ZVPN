@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Optional feature: run explicitly once, then configure it in administrator settings.
+# Installed by the main installer; routing is controlled in administrator settings.
 set -Eeuo pipefail
 [[ $EUID -eq 0 ]] || { echo 'Root required' >&2; exit 1; }
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

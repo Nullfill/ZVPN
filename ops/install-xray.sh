@@ -55,7 +55,9 @@ nginx -t
 systemctl daemon-reload
 systemctl enable xray
 systemctl reload nginx
-if [[ -f /etc/zvpn/warp.json ]]; then
-  bash "$SOURCE_DIR/ops/install-warp.sh"
+# Provision WARP on fresh installations too. Its routing stays disabled until
+# the administrator enables it; a package/network failure must not take down VPN.
+if ! bash "$SOURCE_DIR/ops/install-warp.sh"; then
+  echo '[WARNING] WARP installation did not complete. VPN and panel remain available; rerun ops/install-warp.sh to retry.' >&2
 fi
 echo "Xray $VERSION installed; accounts are synchronized by ZVPN."

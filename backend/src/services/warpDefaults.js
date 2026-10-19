@@ -6,6 +6,7 @@ export const GEMINI_DOMAINS = [
   'geminiweb-pa.clients.google.com', 'geminiweb-pa.clients6.google.com',
   'accounts.google.com', 'apis.google.com', 'ogs.google.com',
   'googleapis.com', 'googleusercontent.com', 'gstatic.com',
+  'www.google.com', 'recaptcha.net',
 ];
 export const WARP_DEFAULTS = {
   enabled: false, scope: 'all', userIds: [], domains: GEMINI_DOMAINS,
