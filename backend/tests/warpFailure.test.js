@@ -22,6 +22,9 @@ test('read-only optional WARP policy keeps IKE sync and the existing Xray servic
   childProcess.execFile = fakeExec;
   syncBuiltinESMExports();
   t.after(() => { childProcess.execFile = originalExec; t.mock.restoreAll(); syncBuiltinESMExports(); });
+  // Node 20's module loader also uses fs.promises.readFile: finish imports
+  // before replacing that method with the runtime-file fixture.
+  const { syncSecretsNow } = await import('../src/services/syncQueue.js');
   t.mock.method(db, 'query', async () => ({ rows: [], rowCount: 0 }));
   t.mock.method(fs, 'access', async () => {});
   t.mock.method(fs, 'readFile', async path => String(path).endsWith('/xray.json')
@@ -31,7 +34,6 @@ test('read-only optional WARP policy keeps IKE sync and the existing Xray servic
   });
   t.mock.method(fs, 'rename', async () => {});
   t.mock.method(fs, 'rm', async () => {});
-  const { syncSecretsNow } = await import('../src/services/syncQueue.js');
   await assert.rejects(syncSecretsNow(), error => error.code === 'EROFS' && error.optionalWarp === true);
   assert.ok(calls.includes('sync-secrets'));
   assert.ok(calls.includes('normalize-conn'));
