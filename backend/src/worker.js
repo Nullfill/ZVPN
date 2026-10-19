@@ -113,7 +113,8 @@ async function enforceQuotas(sessions) {
       // command prevents overlapping terminate calls on consecutive ticks.
       for (const s of mine) {
         try {
-          await disconnectIkeId(s.ikeId);
+          const result = await disconnectIkeId(s.ikeId);
+          if (result.alreadyGone) continue;
           recordEvent({
             level: 'info',
             event: 'vpn.session_terminated',
@@ -138,6 +139,7 @@ async function enforceQuotas(sessions) {
         level: 'error',
         event: 'vpn.session.duplicate_terminate_error',
         action: 'vpn.duplicate_terminate',
+        status: 'failed',
         metadata: { username: action.username, ikeId: action.ikeId, error: action.error?.message || String(action.error) },
       }).catch(() => {});
     } else if (action.type === 'terminate') {

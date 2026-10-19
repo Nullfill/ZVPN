@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { config } from './config.js';
 import { many, db } from './db.js';
 import { decryptSecret } from './crypto.js';
+import { terminateIkeSession } from './services/sessionTermination.js';
 export { parseSas } from './services/saParser.js';
 
 const execFileAsync = promisify(execFile);
@@ -46,6 +47,8 @@ export async function rawSas() {
 }
 
 export async function disconnectIkeId(id) {
-  if (!/^\d+$/.test(String(id))) throw new Error('Invalid IKE id');
-  return helper(['terminate', String(id)]);
+  return terminateIkeSession(id, {
+    terminate: ikeId => helper(['terminate', ikeId]),
+    list: () => helper(['list-sas']),
+  });
 }

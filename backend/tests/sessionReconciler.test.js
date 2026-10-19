@@ -116,3 +116,15 @@ test('failed termination is retried only after retry interval', async () => {
   await reconciler.reconcile(sessions.slice(0, 2), { alice: 1 });
   assert.equal(attempts, 2);
 });
+
+test('an already gone session is remembered without a false error or repeated terminate', async () => {
+  let attempts = 0;
+  let time = 1000;
+  const reconciler = new SessionReconciler({ graceMs: 0, now: () => time,
+    terminate: async () => { attempts += 1; return { alreadyGone: true }; } });
+  const actions = await reconciler.reconcile(sessions.slice(0, 2), { alice: 1 });
+  assert.equal(actions[0].type, 'already_gone');
+  time += 60000;
+  assert.deepEqual(await reconciler.reconcile(sessions.slice(0, 2), { alice: 1 }), []);
+  assert.equal(attempts, 1);
+});

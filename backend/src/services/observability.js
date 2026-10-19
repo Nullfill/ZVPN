@@ -2,7 +2,7 @@ import { db, many, one } from '../db.js';
 import { logger, requestId, scrubMetadata } from '../logger.js';
 
 export async function recordEvent({
-  level = 'info', event, action = null, status = 'success', adminId = null, userId = null,
+  level = 'info', event, action = null, status = level === 'error' ? 'failed' : 'success', adminId = null, userId = null,
   metadata = {}, source = 'zvpn-panel',
 } = {}) {
   if (!event) throw new Error('EVENT_NAME_REQUIRED');

@@ -36,3 +36,19 @@ test('runWithRequestContext propagates requestId correctly within AsyncLocalStor
 
   assert.equal(insideId, customId);
 });
+
+test('errors default to a failed outcome while expected quota warnings remain successful actions', async (t) => {
+  process.env.DATABASE_URL ||= 'postgres://localhost/zvpn_test';
+  process.env.JWT_SECRET ||= 'test-jwt-secret-test-jwt-secret-test-jwt-secret';
+  process.env.MASTER_KEY ||= 'test-master-key-test-master-key-test-master-key';
+  const { db } = await import('../src/db.js');
+  const { logger } = await import('../src/logger.js');
+  const { recordEvent } = await import('../src/services/observability.js');
+  const rows = [];
+  t.mock.method(db, 'query', async (_sql, values) => { rows.push(values); return { rows: [] }; });
+  for (const level of ['error', 'warn', 'info']) t.mock.method(logger, level, () => {});
+  await recordEvent({ level: 'error', event: 'test.failure' });
+  await recordEvent({ level: 'warn', event: 'vpn.quota_blocked' });
+  await recordEvent({ level: 'warn', event: 'admin.login_failed', status: 'failed' });
+  assert.deepEqual(rows.map(row => [row[0], row[3]]), [['error', 'failed'], ['warn', 'success'], ['warn', 'failed']]);
+});

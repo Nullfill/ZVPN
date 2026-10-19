@@ -139,9 +139,9 @@ export class SessionReconciler {
         if (previous?.ok) continue;
         if (previous && now - previous.at < this.retryMs) continue;
         try {
-          await this.terminate(ikeId);
+          const result = await this.terminate(ikeId);
           state.terminations.set(ikeId, { ok: true, at: now });
-          actions.push({ type: 'terminate', username, ikeId, policy });
+          actions.push({ type: result?.alreadyGone ? 'already_gone' : 'terminate', username, ikeId, policy });
         } catch (error) {
           state.terminations.set(ikeId, { ok: false, at: now });
           actions.push({ type: 'terminate_error', username, ikeId, error });
