@@ -35,7 +35,7 @@ export default function AuditPage() {
     enabled: tab === 'strongswan',
   });
 
-  const { data: statsData } = useQuery({
+  const { data: statsData, refetch: refetchStats } = useQuery({
     queryKey: ['observability-stats'],
     queryFn: () => api<ObservabilityStatsResponse>('/api/observability/stats'),
     refetchInterval: 30_000,
@@ -89,6 +89,7 @@ export default function AuditPage() {
               onClick={() => {
                 if (tab === 'events') refetch();
                 else refetchSwan();
+                refetchStats();
               }}
               disabled={isFetching || swanFetching}
             >
