@@ -26,6 +26,7 @@ import { runMigrations } from './migrate.js';
 import { syncSecretsNow, syncStatus } from './services/syncQueue.js';
 import { xrayLink } from './services/xrayConfig.js';
 import { getXrayStatus } from './services/xray.js';
+import { getWarpStatus, reconnectWarp } from './services/warp.js';
 import { listUsers, getUserById, provisionUser, updateUser, extendUser, addTraffic, deleteUser, regenerateToken, revokeToken, getUserStats, downloadLinks, bulkUsers, resetActivation, resetUserPassword } from './services/users.js';
 import { getSettings, updateSettings, validateSettingsPatch, getSetting } from './services/settings.js';
 import { runGithubBackupNow, testGithubConnection, createGithubRepo, listGithubBackups, scheduleGithubBackup } from './services/githubBackup.js';
@@ -299,6 +300,14 @@ app.get('/api/audit', requireAdmin, asyncHandler(async (_req, res) => {
 }));
 
 app.get('/api/settings', requireAdmin, asyncHandler(async (_req, res) => res.json({ settings: await getSettings() })));
+app.get('/api/warp/status', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json(await getWarpStatus())));
+app.get('/api/warp/users', requireAdmin, adminOnly, asyncHandler(async (_req, res) =>
+  res.json({ users: await many('SELECT id, username FROM vpn_users ORDER BY username') })));
+app.post('/api/warp/reconnect', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
+  await reconnectWarp();
+  await audit(req.admin.id, 'warp.reconnect', 'settings', 'warp', {}, clientIp(req));
+  res.json({ ok: true });
+}));
 app.patch('/api/settings/:section', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
   const section = req.params.section;
   const parsed = validateSettingsPatch(section, req.body);
@@ -307,7 +316,7 @@ app.patch('/api/settings/:section', requireAdmin, adminOnly, asyncHandler(async 
     return apiError(res, 400, 'ENDPOINT_USE_WIZARD');
   }
   const updated = await updateSettings(section, parsed.data);
-  if (section === 'xray') await syncSecretsNow(60000);
+  if (section === 'xray' || section === 'warp') await syncSecretsNow(60000);
   await audit(req.admin.id, 'settings.update', 'settings', section, parsed.data, clientIp(req));
   res.json({ settings: updated });
 }));

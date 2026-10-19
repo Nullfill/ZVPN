@@ -99,6 +99,7 @@ def restore(root):
     apply_network_optimizations(app)
     run(['systemctl','stop','zvpn-panel','strongswan-starter'])
     subprocess.run(['systemctl','stop','xray'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    subprocess.run(['systemctl','stop','zvpn-warp-router','warp-svc'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     shutil.copy2(root/'panel.env',app/'backend/.env')
     run(['chown','zvpn:zvpn',str(app/'backend/.env')]);os.chmod(app/'backend/.env',0o600)
     ident=lambda value:'"'+value.replace('"','""')+'"'
@@ -116,6 +117,23 @@ def restore(root):
                              ('runtime','/opt/zvpn-panel/runtime'),('systemd','/etc/systemd/system')]:
         copy_tree(root/name,destination)
     copy_tree(root/'legacy-public','/opt/zvpn-panel/backend/public')
+    # Optional WARP state is present only on servers where it was installed.
+    # Copy before install-xray so its conditional installer recreates the proxy.
+    # Never restore captured firewall rules or process counter cursors as live rules.
+    if (root/'warp-policy/warp.json').is_file():
+        copy_tree(root/'warp-policy','/etc/zvpn')
+        for name,destination in [('warp-registration','/var/lib/cloudflare-warp'), ('warp-usage','/var/lib/zvpn-panel/warp')]:
+            if (root/name).is_dir(): copy_tree(root/name,destination)
+        state=pathlib.Path('/var/lib/zvpn-panel/warp')
+        for name in ('rules.json','daemon.lock','status.json'):
+            (state/name).unlink(missing_ok=True)
+        usage=state/'usage.json'
+        if usage.exists():
+            data=json.loads(usage.read_text());data.pop('cursor',None)
+            usage.write_text(json.dumps(data));os.chmod(usage,0o600)
+    else:
+        pathlib.Path('/etc/zvpn/warp.json').unlink(missing_ok=True)
+        subprocess.run(['systemctl','disable','zvpn-warp-router'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for name in ('ipsec.conf','ipsec.secrets'): shutil.copy2(root/name,pathlib.Path('/etc')/name)
     # Never issue replacement certificates during restoration.
     for name in ('ipsec.d/cacerts/ikev2-ca-cert.pem','ipsec.d/certs/ikev2-server-cert.pem',

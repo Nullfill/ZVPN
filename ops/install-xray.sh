@@ -46,6 +46,7 @@ pathlib.Path('/usr/local/etc/xray/version.json').write_text(json.dumps({'version
 PY
 install -o root -g root -m 755 "$SOURCE_DIR/ops/full-backup.py" /usr/local/libexec/zvpn/full-backup.py
 install -o root -g root -m 755 "$SOURCE_DIR/ops/helper/xray-apply.py" /usr/local/libexec/zvpn/xray-apply.py
+install -o root -g root -m 644 "$SOURCE_DIR/ops/helper/warp_policy.py" /usr/local/libexec/zvpn/warp_policy.py
 install -o root -g root -m 644 "$SOURCE_DIR/ops/systemd/xray.service" /etc/systemd/system/xray.service
 # The include is independent of Certbot changes to the existing server block.
 install -o root -g root -m 644 "$SOURCE_DIR/ops/nginx/xray.inc" /etc/nginx/zvpn-xray.inc
@@ -54,4 +55,7 @@ nginx -t
 systemctl daemon-reload
 systemctl enable xray
 systemctl reload nginx
+if [[ -f /etc/zvpn/warp.json ]]; then
+  bash "$SOURCE_DIR/ops/install-warp.sh"
+fi
 echo "Xray $VERSION installed; accounts are synchronized by ZVPN."

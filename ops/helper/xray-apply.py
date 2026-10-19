@@ -41,6 +41,9 @@ def main():
         assert info.st_uid == pwd.getpwnam('zvpn').pw_uid and info.st_mode & 0o077 == 0
         assert info.st_size < 32*1024*1024
         data=validate(json.load(file))
+    # Routing extensions come from a separately validated root-owned policy.
+    from warp_policy import main_xray, read_policy
+    data=main_xray(data, read_policy())
     with tempfile.NamedTemporaryFile(mode='w',suffix='.json',dir='/usr/local/etc/xray',delete=False) as file:
         json.dump(data,file); temp=file.name
     try:

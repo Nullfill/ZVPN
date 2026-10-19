@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tarfile
@@ -39,6 +40,8 @@ def collect(destination):
         'nginx': Path('/etc/nginx'), 'xray': Path('/usr/local/etc/xray'),
         'runtime': Path('/opt/zvpn-panel/runtime'),
         'legacy-public': Path('/opt/zvpn-panel/backend/public'),
+        'warp-policy': Path('/etc/zvpn'),
+        'warp-usage': Path('/var/lib/zvpn-panel/warp'),
     }
     if env_value(env.read_text(), 'PUBLIC_BASE_URL').startswith('https://'):
         tls = Path('/etc/letsencrypt/live')
@@ -64,10 +67,26 @@ def collect(destination):
                     link.unlink();link.symlink_to(relative)
         elif source.is_file():
             shutil.copy2(source, target)
+    if Path('/etc/zvpn/warp.json').is_file():
+        registration = Path('/var/lib/cloudflare-warp')
+        if json.loads(Path('/etc/zvpn/warp.json').read_text()).get('enabled') and not (registration/'reg.json').is_file():
+            raise RuntimeError('Incomplete backup: WARP registration unavailable')
+        target = destination/'warp-registration'; target.mkdir(mode=0o700, exist_ok=True)
+        for name in ('reg.json', 'settings.json', 'conf.json', 'warp.db'):
+            source = registration/name
+            if not source.is_file(): continue
+            if name.endswith('.db') and source.read_bytes()[:16] == b'SQLite format 3\x00':
+                # Include committed WAL content without stopping active users.
+                with sqlite3.connect('file:'+str(source)+'?mode=ro', uri=True) as db:
+                    with sqlite3.connect(target/name) as output: db.backup(output)
+                os.chmod(target/name,0o600)
+            else: shutil.copy2(source,target/name)
     systemd = destination / 'systemd'; systemd.mkdir(exist_ok=True)
-    for name in ('zvpn-panel.service', 'xray.service'):
+    for name in ('zvpn-panel.service', 'xray.service', 'zvpn-warp-router.service'):
         src = Path('/etc/systemd/system') / name
         if src.is_file(): shutil.copy2(src, systemd / name)
+        dropins = Path('/etc/systemd/system') / (name + '.d')
+        if dropins.is_dir(): shutil.copytree(dropins, systemd / (name + '.d'), symlinks=True, dirs_exist_ok=True)
     # Source required for restoration if the release branch later changes.
     for name in ('backend/src', 'backend/scripts', 'backend/public', 'frontend/dist', 'ops', 'backend/package.json',
                  'backend/package-lock.json', 'frontend/package.json','frontend/package-lock.json',

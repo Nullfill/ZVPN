@@ -2,6 +2,7 @@ import { one, many, db } from '../db.js';
 import { config } from '../config.js';
 import { invalidateVpnConfigCache } from './vpnConfig.js';
 import { z } from 'zod';
+import { WARP_DEFAULTS } from './warpDefaults.js';
 
 const DEFAULTS = {
   general: { panelName: config.panelName, timezone: config.timezone, domain: '' },
@@ -14,6 +15,7 @@ const DEFAULTS = {
   appearance: { theme: 'dark', animations: true, threeJs: true, glassIntensity: 0.12 },
   download: { tokenDays: 30, pageTitle: '', supportText: '' },
   xray: { enabled: true },
+  warp: WARP_DEFAULTS,
   telegram: {
     enabled: false,
     botToken: '',
@@ -38,6 +40,17 @@ const DEFAULTS = {
 };
 
 const SETTINGS_SCHEMAS = {
+  warp: z.object({
+    enabled: z.boolean().optional(),
+    scope: z.enum(['all', 'selected']).optional(),
+    userIds: z.array(z.string().uuid()).max(10000).optional(),
+    domains: z.array(z.string().trim().toLowerCase().max(253)
+      .regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62}$/)).min(1).max(200).optional(),
+    excludedDomains: z.array(z.string().trim().toLowerCase().max(253)
+      .regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62}$/)).max(200).optional(),
+    failureMode: z.enum(['block', 'direct']).optional(),
+    disableQuic: z.boolean().optional(),
+  }).strict(),
   xray: z.object({ enabled: z.boolean().optional(), path: z.literal('/zvpn-xhttp/').optional() }).strict(),
   general: z.object({
     panelName: z.string().trim().min(1).max(80).optional(),

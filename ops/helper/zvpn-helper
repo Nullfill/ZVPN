@@ -54,6 +54,15 @@ validate_identity() {
 }
 
 case "$ACTION" in
+  sync-warp)
+    exec /usr/local/libexec/zvpn/warp-router.py sync
+    ;;
+  warp-status)
+    exec /usr/local/libexec/zvpn/warp-router.py status
+    ;;
+  warp-reconnect)
+    exec /usr/local/libexec/zvpn/warp-router.py reconnect
+    ;;
   full-backup)
     exec /usr/local/libexec/zvpn/full-backup.py
     ;;

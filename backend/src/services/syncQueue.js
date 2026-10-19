@@ -27,7 +27,7 @@ function enqueueSync() {
       retryTimer = null;
     } catch (e) {
       lastError = e.message;
-      if (await xrayAvailable()) await stopXray().catch(() => {});
+      if (!e.optionalWarp && await xrayAvailable()) await stopXray().catch(() => {});
       console.error('[sync-queue]', e.message);
       if (!retryTimer) retryTimer = setTimeout(() => {
         retryTimer = null;

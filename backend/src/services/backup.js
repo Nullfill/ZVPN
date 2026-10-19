@@ -106,7 +106,7 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
   }
   if (data.settings && typeof data.settings === 'object') {
     for (const [key, value] of Object.entries(data.settings)) {
-      if (['general', 'vpn', 'appearance', 'download', 'telegram', 'github', 'xray'].includes(key)) {
+      if (['general', 'vpn', 'appearance', 'download', 'telegram', 'github', 'xray', 'warp'].includes(key)) {
         const parsed = validateSettingsPatch(key, value);
         if (!parsed.success) throw new Error('INVALID_BACKUP_SETTINGS');
       }
@@ -132,7 +132,7 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
   await tx(async (client) => {
     if (data.settings && mode !== 'users-only') {
       for (const [key, value] of Object.entries(data.settings)) {
-        if (!value || typeof value !== 'object' || !['general', 'vpn', 'appearance', 'download', 'telegram', 'github', 'xray'].includes(key)) continue;
+        if (!value || typeof value !== 'object' || !['general', 'vpn', 'appearance', 'download', 'telegram', 'github', 'xray', 'warp'].includes(key)) continue;
         await client.query(
           `INSERT INTO panel_settings(key, value, updated_at) VALUES($1, $2::jsonb, now())
            ON CONFLICT(key) DO UPDATE SET value=$2::jsonb, updated_at=now()`,

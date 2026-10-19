@@ -14,7 +14,7 @@ class FullBackupTests(unittest.TestCase):
             root=pathlib.Path(folder); fixture=root/'fixture';app=fixture/'opt/zvpn-panel/app'
             def mapped(value):
                 text=str(value)
-                return fixture/text.lstrip('/') if text.startswith(('/etc/','/opt/')) else pathlib.Path(value)
+                return fixture/text.lstrip('/') if text.startswith(('/etc/','/opt/','/var/')) else pathlib.Path(value)
             files={
                 'opt/zvpn-panel/app/backend/.env':f'DATABASE_URL={os.environ["TEST_DATABASE_URL"]}\nPUBLIC_BASE_URL=https://vpn.example.com\nMASTER_KEY=fixture-only\n'.encode(),
                 'etc/ipsec.conf':b'unchanged IKE config', 'etc/ipsec.secrets':b'unchanged secret',
@@ -24,6 +24,10 @@ class FullBackupTests(unittest.TestCase):
                 'etc/ipsec.d/private/ikev2-server-key.pem':b'unchanged server key',
                 'etc/letsencrypt/archive/vpn.example.com/privkey1.pem':b'unchanged SSL key',
                 'etc/nginx/sites-available/zvpn-panel':b'original HTTPS site',
+                'etc/zvpn/warp.json':b'{"enabled":true}',
+                'var/lib/cloudflare-warp/reg.json':b'{"registration":"original-private-device-identity"}',
+                'var/lib/zvpn-panel/warp/usage.json':b'{"uplink":123,"downlink":456,"daily":{"2026-10-19":579}}',
+                'etc/systemd/system/zvpn-panel.service.d/warp.conf':b'[Service]\nReadWritePaths=/etc/zvpn\n',
             }
             for name,data in files.items():
                 file=fixture/name;file.parent.mkdir(parents=True,exist_ok=True);file.write_bytes(data)
@@ -40,6 +44,10 @@ class FullBackupTests(unittest.TestCase):
             restore.verify_snapshot(output)
             for name,data in files.items():
                 target='panel.env' if name.endswith('/.env') else name.removeprefix('etc/')
+                if name.startswith('etc/zvpn/'): target='warp-policy/'+name.removeprefix('etc/zvpn/')
+                if name.startswith('var/lib/cloudflare-warp/'): target='warp-registration/'+name.removeprefix('var/lib/cloudflare-warp/')
+                if name.startswith('var/lib/zvpn-panel/warp/'): target='warp-usage/'+name.removeprefix('var/lib/zvpn-panel/warp/')
+                if name.startswith('etc/systemd/system/'): target='systemd/'+name.removeprefix('etc/systemd/system/')
                 self.assertEqual((output/target).read_bytes(),data)
             self.assertIn(b'PostgreSQL database dump',gzip.decompress((output/'database.sql.gz').read_bytes()))
             self.assertTrue((output/'app-source/backend/scripts/create-admin.js').is_file())

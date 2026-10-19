@@ -1,0 +1,17 @@
+[Unit]
+Description=ZVPN selective WARP routing and traffic counters
+After=network-online.target warp-svc.service strongswan-starter.service
+Wants=network-online.target warp-svc.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/zvpn/warp-router.py daemon
+ExecStopPost=/usr/local/libexec/zvpn/warp-router.py cleanup
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=20
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

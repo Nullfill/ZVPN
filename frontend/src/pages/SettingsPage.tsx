@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { GlassCard, PageHeader, Modal } from '../components/UI';
 import { useToast } from '../components/Toast';
 import VpnEndpointWizard from '../components/VpnEndpointWizard';
+import WarpSettings from '../components/WarpSettings';
 
 interface PanelSettings {
   general: { panelName: string; timezone: string; domain: string };
@@ -38,7 +39,7 @@ export default function SettingsPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeTab, setActiveTab] = useState<'general' | 'endpoint' | 'vpn' | 'backup' | 'security'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'endpoint' | 'vpn' | 'backup' | 'security' | 'warp'>('general');
 
   // Form states
   const [generalForm, setGeneralForm] = useState({ panelName: '', timezone: '', domain: '' });
@@ -305,6 +306,7 @@ export default function SettingsPage() {
 
       {/* Tabs Navigation */}
       <div className="flex flex-wrap gap-2 border-b border-[var(--line)] pb-3">
+        {['admin', 'owner'].includes(meData?.user.role || '') && <button className={`nav-item ${activeTab === 'warp' ? 'active font-bold' : ''}`} onClick={() => setActiveTab('warp')}><Shield size={18} /> مسیر WARP</button>}
         <button
           className={`nav-item ${activeTab === 'general' ? 'active font-bold' : ''}`}
           onClick={() => setActiveTab('general')}
@@ -338,6 +340,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Tab Contents */}
+      {activeTab === 'warp' && <WarpSettings />}
       {activeTab === 'general' && (
         <GlassCard className="max-w-2xl space-y-4">
           <h3 className="text-lg font-bold">تنظیمات عمومی پنل</h3>

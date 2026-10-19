@@ -7,6 +7,7 @@ import { getSetting } from './settings.js';
 import { buildXrayConfig, parseXrayStats } from './xrayConfig.js';
 
 import { recordXrayCounters } from './sharedUsage.js';
+import { prepareWarpPolicy } from './warp.js';
 
 const exec = promisify(execFile);
 export const XRAY_RUNTIME_CONFIG = '/opt/zvpn-panel/runtime/xray.json';
@@ -80,10 +81,17 @@ export async function syncXray() {
     return;
   }
   const users = await many('SELECT * FROM vpn_users ORDER BY id');
+  let warpChanged = false;
+  let warpError = null;
+  try { warpChanged = await prepareWarpPolicy(users); }
+  catch (error) { error.optionalWarp = true; warpError = error; }
   const json = JSON.stringify(buildXrayConfig(users, settings.enabled !== false), null, 2) + '\n';
   // Root owns the applied config; this comparison is against the readable runtime copy.
   const desired = await fs.readFile(XRAY_RUNTIME_CONFIG, 'utf8').catch(() => '');
-  if (desired === json && (await helper('xray-epoch')).trim() !== 'stopped') return;
+  if (!warpChanged && desired === json && (await helper('xray-epoch')).trim() !== 'stopped') {
+    if (warpError) throw warpError;
+    return;
+  }
   // Drain counters before managed restarts. If statistics fail, stop rather than
   // serve unmetered traffic or keep revoked users connected.
   try { await collectXrayUsage(); } catch (error) {
@@ -98,4 +106,5 @@ export async function syncXray() {
     await fs.rm(XRAY_RUNTIME_CONFIG, { force: true });
     throw error;
   }
+  if (warpError) throw warpError;
 }
