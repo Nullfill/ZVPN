@@ -24,7 +24,7 @@ export default function WarpSettings() {
   const settings = useQuery({ queryKey: ['settings'], queryFn: () => api<{ settings: { warp: Policy } }>('/api/settings') });
   const status = useQuery({ queryKey: ['warp-status'], queryFn: () => api<Status>('/api/warp/status'), refetchInterval: 10000 });
   const users = useQuery({ queryKey: ['warp-users'], queryFn: () => api<{ users: { id: string; username: string }[] }>('/api/warp/users') });
-  const presets = useQuery({ queryKey: ['warp-presets'], queryFn: () => api<{ geminiDomains: string[] }>('/api/warp/presets'), staleTime: 60000 });
+  const presets = useQuery({ queryKey: ['warp-presets'], queryFn: () => api<{ geminiDomains: string[]; antigravityDomains: string[] }>('/api/warp/presets'), staleTime: 60000 });
   useEffect(() => {
     if (!form && settings.data?.settings.warp) {
       const policy = settings.data.settings.warp;
@@ -91,6 +91,7 @@ export default function WarpSettings() {
           <p className="text-xs text-muted">هر خط یک دامنه، بدون https یا مسیر؛ زیردامنه‌های آن هم شامل می‌شوند.</p>
           <textarea id="warp-domains" className="input w-full min-h-64 font-mono text-xs" dir="ltr" value={domains} onChange={e => setDomains(e.target.value)} />
           <button className="btn-ghost text-xs" disabled={!presets.data} onClick={() => setDomains([...new Set([...lines(domains), ...(presets.data?.geminiDomains || [])])].join('\n'))}>افزودن مجموعه Gemini، ورود و تأیید گوگل</button>
+          <button className="btn-ghost text-xs" disabled={!presets.data} onClick={() => setDomains([...new Set([...lines(domains), ...(presets.data?.antigravityDomains || [])])].join('\n'))}>افزودن مجموعه Antigravity و API گوگل</button>
         </div>
         <div className="space-y-2"><label className="block font-bold text-sm" htmlFor="warp-excluded">سایت‌های مستثنا</label>
           <p className="text-xs text-muted">این دامنه‌ها همیشه مستقیم می‌روند و بر فهرست مشمول اولویت دارند.</p>

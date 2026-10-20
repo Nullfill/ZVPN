@@ -8,6 +8,17 @@ export const GEMINI_DOMAINS = [
   'googleapis.com', 'googleusercontent.com', 'gstatic.com',
   'www.google.com', 'recaptcha.net',
 ];
+// Endpoints observed in the installed Antigravity app, plus sign-in helpers.
+// Keep this separate from Gemini defaults so custom policies are never expanded silently.
+export const ANTIGRAVITY_DOMAINS = [
+  'antigravity.google', 'antigravity.google.com',
+  'antigravity-unleash.goog',
+  'daily-cloudcode-pa.googleapis.com', 'cloudcode-pa.googleapis.com',
+  'generativelanguage.googleapis.com', 'cloudaicompanion.googleapis.com',
+  'jetski-webchannel.googleapis.com',
+  'accounts.google.com', 'www.google.com', 'recaptcha.net',
+  'googleapis.com', 'googleusercontent.com', 'gstatic.com',
+];
 export const WARP_DEFAULTS = {
   enabled: false, scope: 'all', userIds: [], domains: GEMINI_DOMAINS,
   excludedDomains: [], failureMode: 'block', disableQuic: true,
