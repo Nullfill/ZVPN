@@ -63,6 +63,30 @@ class WarpPolicyTests(unittest.TestCase):
 
 @unittest.skipUnless(os.name == 'posix', 'Linux router tests')
 class WarpRouterTests(unittest.TestCase):
+    def test_ip_rotation_reports_change_and_does_not_reset_registration(self):
+        import tempfile
+        for old, new, expected in [('104.28.1.1', '104.28.1.2', 'changed'), ('104.28.1.1', '104.28.1.1', 'unchanged')]:
+            with tempfile.TemporaryDirectory() as folder, patch.object(self.router, 'STATE', Path(folder)), \
+                 patch.object(self.router, 'atomic', side_effect=lambda p, data: p.write_text(__import__('json').dumps(data))), \
+                 patch.object(self.router.time, 'sleep'), patch.object(self.router, 'command') as run, \
+                 patch.object(self.router, 'probe', side_effect=[{'healthy': True, 'exitIp': old}, {'healthy': True, 'exitIp': new}]):
+                result = self.router.rotate_ip()
+                self.assertEqual(result['outcome'], expected)
+                self.assertEqual(result['beforeIp'], old)
+                self.assertEqual(result['afterIp'], new)
+                self.assertEqual([call.args[0][-1] for call in run.call_args_list], ['disconnect', 'connect'])
+                self.assertEqual(self.router.rotate_ip()['outcome'], 'cooldown')
+
+    def test_ip_rotation_failure_requests_recovery_and_keeps_registration(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder, patch.object(self.router, 'STATE', Path(folder)), \
+             patch.object(self.router, 'atomic', side_effect=lambda p, data: p.write_text(__import__('json').dumps(data))), \
+             patch.object(self.router.time, 'sleep'), patch.object(self.router, 'command') as run, \
+             patch.object(self.router, 'probe', return_value={'healthy': False}):
+            run.side_effect = [RuntimeError('disconnect failed'), SimpleNamespace(stdout='')]
+            self.assertEqual(self.router.rotate_ip()['outcome'], 'failed')
+            self.assertEqual(run.call_args_list[-1].args[0][-1], 'connect')
+
     @classmethod
     def setUpClass(cls):
         spec = importlib.util.spec_from_file_location('router', HELPER / 'warp-router.py')

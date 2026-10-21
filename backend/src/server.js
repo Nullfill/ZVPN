@@ -29,7 +29,7 @@ import { xrayLink } from './services/xrayConfig.js';
 import { netlifyLink } from './services/netlifyConfig.js';
 import { subscriptionInfo, subscriptionLinks } from './services/subscription.js';
 import { getXrayStatus } from './services/xray.js';
-import { getWarpStatus, reconnectWarp } from './services/warp.js';
+import { getWarpStatus, reconnectWarp, rotateWarpIp } from './services/warp.js';
 import { GEMINI_DOMAINS, ANTIGRAVITY_DOMAINS } from './services/warpDefaults.js';
 import { listUsers, getUserById, provisionUser, updateUser, extendUser, addTraffic, deleteUser, regenerateToken, revokeToken, getUserStats, downloadLinks, bulkUsers, resetActivation, resetUserPassword } from './services/users.js';
 import { getSettings, updateSettings, validateSettingsPatch, getSetting } from './services/settings.js';
@@ -316,6 +316,11 @@ app.post('/api/warp/reconnect', requireAdmin, adminOnly, asyncHandler(async (req
   await reconnectWarp();
   await audit(req.admin.id, 'warp.reconnect', 'settings', 'warp', {}, clientIp(req));
   res.json({ ok: true });
+}));
+app.post('/api/warp/rotate-ip', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
+  const result = await rotateWarpIp();
+  await audit(req.admin.id, 'warp.rotate_ip', 'settings', 'warp', result, clientIp(req));
+  res.json(result);
 }));
 app.patch('/api/settings/:section', requireAdmin, adminOnly, asyncHandler(async (req, res) => {
   const section = req.params.section;

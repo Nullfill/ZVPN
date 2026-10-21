@@ -38,3 +38,13 @@ export async function getWarpStatus() {
 export async function reconnectWarp() {
   await exec('sudo', [config.helper, 'warp-reconnect'], { timeout: 15000 });
 }
+
+let rotationPending = false;
+export async function rotateWarpIp() {
+  if (rotationPending) return { outcome: 'busy' };
+  rotationPending = true;
+  try {
+    const { stdout } = await exec('sudo', [config.helper, 'warp-rotate-ip'], { timeout: 70000 });
+    return JSON.parse(stdout);
+  } finally { rotationPending = false; }
+}

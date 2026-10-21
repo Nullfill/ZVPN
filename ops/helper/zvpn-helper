@@ -63,6 +63,9 @@ case "$ACTION" in
   warp-reconnect)
     exec /usr/local/libexec/zvpn/warp-router.py reconnect
     ;;
+  warp-rotate-ip)
+    exec /usr/local/libexec/zvpn/warp-router.py rotate-ip
+    ;;
   full-backup)
     exec /usr/local/libexec/zvpn/full-backup.py
     ;;

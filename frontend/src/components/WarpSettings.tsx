@@ -51,6 +51,15 @@ export default function WarpSettings() {
   const reconnect = useMutation({ mutationFn: () => api('/api/warp/reconnect', { method: 'POST', body: '{}' }),
     onSuccess: () => { toast('درخواست اتصال مجدد ارسال شد؛ وضعیت تا ۳۰ ثانیه به‌روز می‌شود.', 'success'); qc.invalidateQueries({ queryKey: ['warp-status'] }); },
     onError: (e: Error) => toast(e.message, 'error') });
+  const rotate = useMutation({
+    mutationFn: () => api<{ outcome: string; beforeIp?: string; afterIp?: string; retryAfter?: number }>('/api/warp/rotate-ip', { method: 'POST', body: '{}' }),
+    onSuccess: result => {
+      const messages: Record<string, string> = { changed: 'IP خروجی تغییر کرد.', unchanged: 'کلادفلر همان IP قبلی را داد؛ تغییری نکرد.', connected: 'WARP وصل شد؛ IP قبلی قابل بررسی نبود.', failed: 'اتصال جدید تأیید نشد؛ وضعیت WARP را بررسی کنید.', busy: 'تلاش دیگری در حال انجام است.', cooldown: `برای تلاش بعدی ${result.retryAfter || 60} ثانیه صبر کنید.` };
+      toast(messages[result.outcome] || 'بررسی پایان یافت.', ['changed', 'connected'].includes(result.outcome) ? 'success' : 'info');
+      qc.invalidateQueries({ queryKey: ['warp-status'] });
+    },
+    onError: (e: Error) => { toast(e.message, 'error'); qc.invalidateQueries({ queryKey: ['warp-status'] }); },
+  });
   if (!form) return <GlassCard>در حال دریافت تنظیمات…</GlassCard>;
   const s = status.data;
   const enabled = settings.data?.settings.warp.enabled ?? false;
@@ -81,7 +90,15 @@ export default function WarpSettings() {
       {s?.error && <p className="text-sm text-amber-400 break-words" dir="ltr">{s.error}</p>}
       {status.isError && <p className="text-amber-400 text-sm">دریافت وضعیت ناموفق بود؛ دسترسی یا سرویس را بررسی کنید.</p>}
       {s && !s.installed && <p className="text-amber-400 text-sm">نصب WARP روی این سرور کامل نشده است؛ مدیر سرور باید نصب را دوباره اجرا کند.</p>}
-      <button className="btn-ghost" disabled={!s?.installed || reconnect.isPending} onClick={() => reconnect.mutate()}><RefreshCw size={16} /> اتصال مجدد</button>
+      <div className="flex flex-wrap gap-3">
+        <button className="btn-ghost" disabled={!s?.installed || reconnect.isPending || rotate.isPending} onClick={() => reconnect.mutate()}><RefreshCw size={16} /> اتصال مجدد</button>
+        <button className="btn-primary" disabled={!s?.installed || !enabled || rotate.isPending || reconnect.isPending} onClick={() => rotate.mutate()}><RefreshCw size={16} className={rotate.isPending ? 'animate-spin' : ''} />{rotate.isPending ? 'در حال تلاش برای تغییر IP…' : 'تلاش برای تغییر IP'}</button>
+      </div>
+      <p className="text-xs text-muted">تغییر IP، WARP را کوتاه قطع‌و‌وصل می‌کند؛ فقط ترافیک سایت‌های مشمول ممکن است موقتاً قطع شود. تغییر IP تضمینی نیست. بین دو تلاش یک دقیقه فاصله است.</p>
+      {rotate.data && <div className="rounded-xl border border-[var(--line)] p-3 text-sm space-y-2" aria-live="polite">
+        <p>{({ changed: 'IP خروجی تغییر کرد', unchanged: 'IP خروجی تغییر نکرد', connected: 'اتصال برقرار شد', failed: 'اتصال جدید تأیید نشد', busy: 'تلاش دیگری در جریان است', cooldown: 'لطفاً کمی صبر کنید' } as Record<string,string>)[rotate.data.outcome]}</p>
+        {(rotate.data.beforeIp || rotate.data.afterIp) && <p dir="ltr">{rotate.data.beforeIp || '—'} → {rotate.data.afterIp || '—'}</p>}
+      </div>}
     </GlassCard>
     <GlassCard className="space-y-5">
       <h3 className="font-bold">انتخاب سایت‌ها و کاربران</h3>

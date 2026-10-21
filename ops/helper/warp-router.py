@@ -176,6 +176,52 @@ def probe():
         return {'healthy': False, 'error': 'WARP probe failed', 'checkedAt': datetime.datetime.now(datetime.timezone.utc).isoformat()}
 
 
+def rotate_ip():
+    """Bounded reconnect attempt; preserve registration, policies and counters."""
+    STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with (STATE / 'rotate.lock').open('w') as lock:
+        try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError: return {'outcome': 'busy'}
+        previous = {}
+        result_file = STATE / 'rotation.json'
+        if result_file.exists():
+            try: previous = json.loads(result_file.read_text())
+            except (ValueError, OSError): pass
+        if time.time() - previous.get('timestamp', 0) < 60:
+            return {'outcome': 'cooldown', 'retryAfter': max(1, round(60 - (time.time() - previous['timestamp'])))}
+        before = probe()
+        result = {'beforeIp': before.get('exitIp') if before.get('healthy') else None,
+                  'outcome': 'failed', 'timestamp': time.time()}
+        # Record the attempt before disruption so rapid retries cannot flap WARP.
+        atomic(result_file, result)
+        try:
+            command(['warp-cli', '--accept-tos', 'disconnect'], timeout=8)
+            time.sleep(1)
+            command(['warp-cli', '--accept-tos', 'connect'], timeout=8)
+            for _ in range(2):
+                time.sleep(2)
+                after = probe()
+                if after.get('healthy') and after.get('exitIp'):
+                    result.update(after)
+                    result['afterIp'] = after['exitIp']
+                    result['outcome'] = ('changed' if result['beforeIp'] != after['exitIp'] else 'unchanged') if result['beforeIp'] else 'connected'
+                    break
+        except Exception:
+            # Always request recovery; do not reset identity or restart VPN cores.
+            try: command(['warp-cli', '--accept-tos', 'connect'], check=False, timeout=8)
+            except Exception: pass
+        result['timestamp'] = time.time()
+        atomic(result_file, result)
+        return result
+
+
+def rotating():
+    with (STATE / 'rotate.lock').open('a') as lock:
+        try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError: return True
+        return False
+
+
 def daemon():
     global stopping
     STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -205,7 +251,7 @@ def daemon():
             try:
                 policy = read_policy()
                 enabled = bool(policy and policy['enabled'])
-                if enabled and time.monotonic() - last_probe > 30:
+                if enabled and time.monotonic() - last_probe > 30 and not rotating():
                     health = probe(); last_probe = time.monotonic()
                     if not health['healthy']:
                         command(['warp-cli', '--accept-tos', 'connect'], check=False)
@@ -267,11 +313,12 @@ def daemon():
 def main():
     if os.geteuid() != 0: raise RuntimeError('Root required')
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['sync', 'daemon', 'cleanup', 'reconnect', 'status'])
+    parser.add_argument('action', choices=['sync', 'daemon', 'cleanup', 'reconnect', 'rotate-ip', 'status'])
     args = parser.parse_args()
     if args.action == 'sync': sync_policy()
     elif args.action == 'cleanup': cleanup(); guard(remove=True)
     elif args.action == 'reconnect': command(['warp-cli', '--accept-tos', 'connect'])
+    elif args.action == 'rotate-ip': print(json.dumps(rotate_ip()))
     elif args.action == 'status': print((STATE / 'status.json').read_text())
     else: daemon()
 
