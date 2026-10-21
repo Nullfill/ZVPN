@@ -18,6 +18,8 @@ class DatabaseRecoveryTests(unittest.TestCase):
             sql(admin,f'CREATE DATABASE {target} OWNER {role};')
             sql(url(source),(ROOT/'ops/schema.sql').read_text())
             for migration in sorted((ROOT/'ops/migrations').glob('*.sql')):sql(url(source),migration.read_text())
+            relay_policy='{"enabled":true,"hostname":"relay.example.com"}'
+            sql(url(source),f"UPDATE panel_settings SET value='{relay_policy}'::jsonb WHERE key='netlify';")
             sql(url(source),"""INSERT INTO vpn_users(username,secret_enc,download_token,expires_at,usage_total,xray_uuid)
               VALUES('existing-user','original-encrypted-secret','original-download-token','2030-01-01',123456,
                 '22222222-2222-4222-8222-222222222222');""")
@@ -27,6 +29,8 @@ class DatabaseRecoveryTests(unittest.TestCase):
             sql(url(target),f'SET ROLE {role};\n'+dump.decode())
             after=sql(url(target),'SELECT username,secret_enc,download_token,expires_at,usage_total,xray_uuid FROM vpn_users;')
             self.assertEqual(before,after)
+            self.assertEqual(sql(url(source),"SELECT value FROM panel_settings WHERE key='netlify';"),
+                             sql(url(target),"SELECT value FROM panel_settings WHERE key='netlify';"))
             self.assertEqual(sql(url(target),"SELECT tableowner FROM pg_tables WHERE tablename='vpn_users';").strip().decode(),role)
         finally:
             for name in (source,target):

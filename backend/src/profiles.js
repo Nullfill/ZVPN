@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { decryptSecret } from './crypto.js';
 import { getVpnProfileConfig } from './services/vpnConfig.js';
 import { xrayLink } from './services/xrayConfig.js';
+import { netlifyLink } from './services/netlifyConfig.js';
 import QRCode from 'qrcode';
 
 let caCache = null;
@@ -302,10 +303,14 @@ export async function downloadPageHtml(user, links, settings) {
   const remoteId = htmlEsc(vpn.remoteId || vpn.serverAddress);
   let xray = null;
   let qr = null;
+  let relay = null;
+  let relayQr = null;
   if (settings?.xray?.enabled !== false && user.xray_uuid) {
     try {
       xray = xrayLink(user, config.publicBaseUrl);
       qr = await QRCode.toDataURL(xray, { width: 240, margin: 2 });
+      relay = netlifyLink(user, config.publicBaseUrl, settings?.netlify);
+      if (relay) relayQr = await QRCode.toDataURL(relay, { width: 240, margin: 2 });
     } catch { /* TLS has not been configured yet; never advertise insecure links. */ }
   }
 
@@ -406,6 +411,16 @@ a.btn.alt{background:rgba(255,255,255,.1)}a.btn span{font-size:.78rem;opacity:.8
     <a class="btn alt" href="${htmlEsc(links.landing)}/xray">دانلود کانفیگ</a>
     <a class="btn alt" href="${htmlEsc(links.landing)}/xray-subscription">لینک اشتراک Xray</a></div>
     <img src="${qr}" width="240" height="240" alt="QR کانفیگ Xray" style="display:block;margin:16px auto;border-radius:12px">
+  </div>` : ''}
+
+  ${relay ? `<div class="card section">
+    <h2>اتصال از واسط Netlify</h2>
+    <p class="sub">اگر اتصال مستقیم روی اینترنت شما باز نمی‌شود، این کانفیگ را در برنامه سازگار با XHTTP وارد کنید. حجم و تاریخ اعتبار با سایر اتصال‌های شما مشترک است.</p>
+    <textarea id="netlify-config" readonly dir="ltr" style="width:100%;min-height:100px;margin:14px 0;padding:12px;border-radius:12px;overflow-wrap:anywhere">${htmlEsc(relay)}</textarea>
+    <div class="btns"><button type="button" onclick="navigator.clipboard.writeText(document.getElementById('netlify-config').value).then(()=>this.textContent='کپی شد').catch(()=>document.getElementById('netlify-config').select())">کپی کانفیگ Netlify</button>
+    <a class="btn" href="${htmlEsc(links.landing)}/netlify">دانلود کانفیگ Netlify</a>
+    <a class="btn alt" href="${htmlEsc(links.landing)}/netlify-subscription">اشتراک Netlify</a></div>
+    <img src="${relayQr}" width="240" height="240" alt="QR کانفیگ Netlify" style="display:block;margin:16px auto;border-radius:12px">
   </div>` : ''}
 
   <div class="card section">

@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { invalidateVpnConfigCache } from './vpnConfig.js';
 import { z } from 'zod';
 import { WARP_DEFAULTS } from './warpDefaults.js';
+import { NETLIFY_DEFAULTS, validRelayHostname } from './netlifyConfig.js';
 
 const DEFAULTS = {
   general: { panelName: config.panelName, timezone: config.timezone, domain: '' },
@@ -15,6 +16,7 @@ const DEFAULTS = {
   appearance: { theme: 'dark', animations: true, threeJs: true, glassIntensity: 0.12 },
   download: { tokenDays: 30, pageTitle: '', supportText: '' },
   xray: { enabled: true },
+  netlify: NETLIFY_DEFAULTS,
   warp: WARP_DEFAULTS,
   telegram: {
     enabled: false,
@@ -40,6 +42,12 @@ const DEFAULTS = {
 };
 
 const SETTINGS_SCHEMAS = {
+  netlify: z.object({
+    enabled: z.boolean().optional(),
+    hostname: z.string().trim().toLowerCase().refine(value => value === '' || validRelayHostname(value), 'Enter a hostname without https or a path').optional(),
+  }).strict().refine(value => value.enabled !== true || Boolean(value.hostname), 'Hostname is required when enabling Netlify')
+    .refine(value => value.hostname !== '' || value.enabled === false, 'Disable Netlify before clearing its hostname')
+    .refine(value => !value.hostname || value.hostname !== new URL(config.publicBaseUrl).hostname, 'Relay and origin domains must differ'),
   warp: z.object({
     enabled: z.boolean().optional(),
     scope: z.enum(['all', 'selected']).optional(),

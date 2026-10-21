@@ -14,6 +14,17 @@ import tempfile
 
 APP = Path('/opt/zvpn-panel/app')
 
+def copy_relay_source(app, destination):
+    # Deployment credentials, CLI state and private user links must never be copied.
+    for name in ('netlify.toml', 'package.json', 'deno.lock', 'make-link.mjs',
+                 'README.fa.md', 'UPSTREAM.md', 'LICENSE', 'NOTICE', 'COPYING',
+                 'public/index.html', 'netlify/edge-functions/relay.js', 'tests/relay.test.js'):
+        source = app / 'deploy/netlify' / name
+        if source.is_file() and not source.is_symlink():
+            target = destination / 'app-source/deploy/netlify' / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+
 def env_value(text, name):
     for line in text.splitlines():
         if line.startswith(name + '='):
@@ -96,6 +107,7 @@ def collect(destination):
         src = APP / name; dst = destination / 'app-source' / name
         if src.is_dir(): shutil.copytree(src, dst, symlinks=True, dirs_exist_ok=True)
         elif src.is_file(): dst.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(src, dst)
+    copy_relay_source(APP, destination)
     with (destination / 'database.sql.gz').open('wb') as output:
         dump = subprocess.Popen(['pg_dump', env_value(env.read_text(), 'DATABASE_URL'), '--clean', '--if-exists', '--no-owner', '--no-privileges'], stdout=subprocess.PIPE)
         try:

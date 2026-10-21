@@ -34,6 +34,7 @@ REMOTE_DIR="$("${SSH[@]}" 'mktemp -d /tmp/zvpn-migrate-XXXXXXXX')"
 [[ "$REMOTE_DIR" =~ ^/tmp/zvpn-migrate-[A-Za-z0-9]+$ ]] || exit 1
 "${SCP[@]}" "$WORK/backup.tar.gz" "$TOOLS/restore-full-backup.py" "$TOOLS/restore-full-backup.sh" "root@$NEW_IP:$REMOTE_DIR/"
 "${SSH[@]}" "bash '$REMOTE_DIR/restore-full-backup.sh' '$REMOTE_DIR/backup.tar.gz' --yes"
+"${SSH[@]}" 'cd /opt/zvpn-panel/app/backend && node scripts/netlify-status.js'
 "${SSH[@]}" "rm -rf -- '$REMOTE_DIR'"
 echo 'Migration complete. Point the existing domain DNS to the new server.'
 echo 'Accounts, shared traffic, Xray UUIDs and the existing IKE/TLS certificates are preserved.'

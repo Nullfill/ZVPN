@@ -6,6 +6,17 @@ spec=importlib.util.spec_from_file_location('restore',ROOT/'ops/restore-full-bac
 restore=importlib.util.module_from_spec(spec);spec.loader.exec_module(restore)
 
 class FullBackupTests(unittest.TestCase):
+    def test_relay_source_backup_excludes_cli_credentials_and_private_user_links(self):
+        spec=importlib.util.spec_from_file_location('collector',ROOT/'ops/full-backup.py')
+        collector=importlib.util.module_from_spec(spec);spec.loader.exec_module(collector)
+        with tempfile.TemporaryDirectory() as folder:
+            root=pathlib.Path(folder);app=root/'app';output=root/'backup'
+            for name in ('netlify.toml', 'netlify/edge-functions/relay.js', '.netlify/state.json', '.env', 'private-user.txt', 'node_modules/token'):
+                file=app/'deploy/netlify'/name;file.parent.mkdir(parents=True,exist_ok=True);file.write_text('fixture')
+            collector.copy_relay_source(app,output)
+            copied={str(p.relative_to(output)).replace('\\','/') for p in output.rglob('*') if p.is_file()}
+            self.assertEqual(copied, {'app-source/deploy/netlify/netlify.toml','app-source/deploy/netlify/netlify/edge-functions/relay.js'})
+
     @unittest.skipUnless(os.environ.get('TEST_DATABASE_URL') and shutil.which('pg_dump'), 'requires PostgreSQL client and test database')
     def test_collector_dumps_database_and_copies_current_certificates(self):
         spec=importlib.util.spec_from_file_location('collector',ROOT/'ops/full-backup.py')
@@ -14,7 +25,7 @@ class FullBackupTests(unittest.TestCase):
             root=pathlib.Path(folder); fixture=root/'fixture';app=fixture/'opt/zvpn-panel/app'
             def mapped(value):
                 text=str(value)
-                return fixture/text.lstrip('/') if text.startswith(('/etc/','/opt/','/var/')) else pathlib.Path(value)
+                return fixture/text.lstrip('/') if text.startswith(('/etc/','/opt/','/var/','/usr/local/')) else pathlib.Path(value)
             files={
                 'opt/zvpn-panel/app/backend/.env':f'DATABASE_URL={os.environ["TEST_DATABASE_URL"]}\nPUBLIC_BASE_URL=https://vpn.example.com\nMASTER_KEY=fixture-only\n'.encode(),
                 'etc/ipsec.conf':b'unchanged IKE config', 'etc/ipsec.secrets':b'unchanged secret',
@@ -24,6 +35,7 @@ class FullBackupTests(unittest.TestCase):
                 'etc/ipsec.d/private/ikev2-server-key.pem':b'unchanged server key',
                 'etc/letsencrypt/archive/vpn.example.com/privkey1.pem':b'unchanged SSL key',
                 'etc/nginx/sites-available/zvpn-panel':b'original HTTPS site',
+                'usr/local/etc/xray/config.json':b'{"fixture":"no-production-files"}',
                 'etc/zvpn/warp.json':b'{"enabled":true}',
                 'var/lib/cloudflare-warp/reg.json':b'{"registration":"original-private-device-identity"}',
                 'var/lib/zvpn-panel/warp/usage.json':b'{"uplink":123,"downlink":456,"daily":{"2026-10-19":579}}',
@@ -48,6 +60,7 @@ class FullBackupTests(unittest.TestCase):
                 if name.startswith('var/lib/cloudflare-warp/'): target='warp-registration/'+name.removeprefix('var/lib/cloudflare-warp/')
                 if name.startswith('var/lib/zvpn-panel/warp/'): target='warp-usage/'+name.removeprefix('var/lib/zvpn-panel/warp/')
                 if name.startswith('etc/systemd/system/'): target='systemd/'+name.removeprefix('etc/systemd/system/')
+                if name.startswith('usr/local/etc/xray/'): target='xray/'+name.removeprefix('usr/local/etc/xray/')
                 self.assertEqual((output/target).read_bytes(),data)
             self.assertIn(b'PostgreSQL database dump',gzip.decompress((output/'database.sql.gz').read_bytes()))
             self.assertTrue((output/'app-source/backend/scripts/create-admin.js').is_file())

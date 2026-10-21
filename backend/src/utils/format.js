@@ -54,5 +54,7 @@ export function downloadLinks(token, req = null) {
     base = process.env.PUBLIC_BASE_URL || 'http://127.0.0.1:3300';
   }
   const root = `${base.replace(/\/$/, '')}/d/${token}`;
-  return { landing: root, android: `${root}/android`, ios: `${root}/ios`, windows: `${root}/windows`, windowsLauncher: `${root}/windows-launcher` };
+  return { landing: root, android: `${root}/android`, ios: `${root}/ios`, windows: `${root}/windows`, windowsLauncher: `${root}/windows-launcher`,
+    xray: `${root}/xray`, xraySubscription: `${root}/xray-subscription`,
+    netlify: `${root}/netlify`, netlifySubscription: `${root}/netlify-subscription` };
 }

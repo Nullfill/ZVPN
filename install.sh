@@ -368,6 +368,7 @@ systemctl reload nginx
 sleep 2
 
 # 18. Health Check & Completion Banner
+(cd "$APP/backend" && node scripts/netlify-status.js) || warn "Check Netlify settings in the admin panel"
 echo
 if [[ -f "$APP/doctor.sh" ]]; then
   bash "$APP/doctor.sh" || true

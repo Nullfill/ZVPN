@@ -184,6 +184,7 @@ for attempt in {1..30}; do
 done
 [[ "$XRAY_READY" == 1 ]] || die "Xray provisioning failed; inspect zvpn-panel and xray service logs"
 ok "Existing user accounts synchronized with Xray; expiry and shared balance preserved"
+(cd "$APP_DIR/backend" && node scripts/netlify-status.js) || info "Check Netlify settings in the admin panel"
 
 # ── Done ─────────────────────────────────────────────────────
 echo

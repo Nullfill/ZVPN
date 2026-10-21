@@ -25,6 +25,7 @@ import { disconnectIkeId } from './vpn.js';
 import { runMigrations } from './migrate.js';
 import { syncSecretsNow, syncStatus } from './services/syncQueue.js';
 import { xrayLink } from './services/xrayConfig.js';
+import { netlifyLink, connectionLinks } from './services/netlifyConfig.js';
 import { getXrayStatus } from './services/xray.js';
 import { getWarpStatus, reconnectWarp } from './services/warp.js';
 import { GEMINI_DOMAINS, ANTIGRAVITY_DOMAINS } from './services/warpDefaults.js';
@@ -389,16 +390,21 @@ async function tokenUser(token) {
   return one(`SELECT * FROM vpn_users WHERE download_token=$1 AND download_token_revoked=false`, [token]);
 }
 
-app.get(['/d/:token/xray', '/d/:token/xray-subscription'], asyncHandler(async (req, res) => {
+app.get(['/d/:token/xray', '/d/:token/xray-subscription', '/d/:token/netlify', '/d/:token/netlify-subscription'], asyncHandler(async (req, res) => {
   const user = await tokenUser(req.params.token);
   if (!user) return res.status(404).send('Invalid link');
-  const settings = await getSetting('xray');
-  if (settings.enabled === false) return res.status(503).send('Xray is disabled');
-  const link = xrayLink(user, config.publicBaseUrl);
+  const settings = await getSettings();
+  if (settings.xray.enabled === false) return res.status(503).send('Xray is disabled');
+  const relayOnly = req.path.endsWith('/netlify') || req.path.endsWith('/netlify-subscription');
+  const link = relayOnly ? netlifyLink(user, config.publicBaseUrl, settings.netlify) : xrayLink(user, config.publicBaseUrl);
+  if (!link) return res.status(503).send('Netlify is disabled');
   res.set('Cache-Control', 'no-store');
   res.set('subscription-userinfo', `upload=${user.upload_bytes || 0}; download=${user.download_bytes || 0}; total=${user.unlimited_traffic ? 0 : user.total_limit_bytes || 0}; expire=${user.expires_at ? Math.floor(new Date(user.expires_at).getTime()/1000) : 0}`);
-  if (req.path.endsWith('/xray-subscription')) return res.type('text/plain').send(Buffer.from(link+'\n').toString('base64'));
-  res.set('Content-Disposition', 'attachment; filename="zvpn-xray.txt"');
+  if (req.path.endsWith('-subscription')) {
+    const links = relayOnly ? [link] : connectionLinks(user, config.publicBaseUrl, settings);
+    return res.type('text/plain').send(Buffer.from(links.join('\n')+'\n').toString('base64'));
+  }
+  res.set('Content-Disposition', `attachment; filename="${relayOnly ? 'zvpn-netlify' : 'zvpn-xray'}.txt"`);
   return res.type('text/plain').send(link+'\n');
 }));
 
