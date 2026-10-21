@@ -2,7 +2,7 @@
 
 ### VPN Server Address (Admin Settings)
 - آدرس سرور و Remote ID از **تنظیمات ادمین** (DB) — override بر `.env`
-- همه پروفایل‌های Android / iOS / Windows و صفحه دانلود از `ike.spinbox.ir` یا هر دامنه‌ای که بزنید
+- همه پروفایل‌های Android / iOS / Windows و صفحه دانلود از `vpn.example.com` یا هر دامنه‌ای که بزنید
 - کاربران با **همان لینک دانلود** فایل جدید می‌گیرند
 
 ### Backup Export / Import

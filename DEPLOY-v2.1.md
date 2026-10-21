@@ -2,7 +2,7 @@
 
 ## ویژگی‌های جدید
 
-1. **آدرس VPN از تنظیمات ادمین** — مثلاً `ike.spinbox.ir` به‌جای IP در همه پروفایل‌ها
+1. **آدرس VPN از تنظیمات ادمین** — مثلاً `vpn.example.com` به‌جای IP در همه پروفایل‌ها
 2. **Export / Import JSON** — انتقال پنل به سرور جدید
 3. **فونت Vazirmatn** — فارسی در UI
 
@@ -45,8 +45,8 @@ sudo systemctl restart zvpn-panel
 
 1. پنل → **تنظیمات**
 2. بخش **آدرس سرور VPN**
-3. Server Address: `ike.spinbox.ir`
-4. Remote ID: `ike.spinbox.ir` (یا همان)
+3. Server Address: `vpn.example.com`
+4. Remote ID: `vpn.example.com` (یا همان)
 5. ذخیره
 
 کاربران با **همان لینک دانلود قبلی** دوباره فایل می‌گیرند — آدرس جدید داخل فایل است.
