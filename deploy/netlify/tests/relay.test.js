@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRelay } from '../netlify/edge-functions/relay.js';
+import { makeRelayLink, RELAY_EXTRA } from '../make-link.mjs';
 
 const request = (path, init) => new Request('https://test.netlify.app' + path, init);
 test('only XHTTP session paths are forwarded; admin paths and encoded traversal never reach origin', async () => {
@@ -65,4 +66,33 @@ test('download response is returned before the complete body arrives', async () 
   controller.close();
   assert.deepEqual((await reader.read()).value, new Uint8Array([2]));
   assert.equal((await reader.read()).done, true);
+});
+
+test('relay padding is translated for the existing origin without changing its config', async () => {
+  let calls = 0;
+  const relay = createRelay('https://origin.example', async (_url, init) => {
+    calls++;
+    assert.equal(new URL(init.headers.get('referer')).origin, 'https://origin.example');
+    assert.equal(new URL(init.headers.get('referer')).searchParams.get('x_padding'), 'X'.repeat(120));
+    assert.equal(init.headers.has('x-relay-padding'), false);
+    return new Response(null, { headers: { 'x-padding': 'X'.repeat(150) } });
+  });
+  const good = await relay(request('/zvpn-xhttp/session/0', { method: 'POST', headers: { 'x-relay-padding': 'X'.repeat(120) } }));
+  assert.equal(good.headers.get('x-relay-padding'), 'X'.repeat(150));
+  for (const padding of ['short', 'X'.repeat(1001), 'A'.repeat(120)]) {
+    assert.equal((await relay(request('/zvpn-xhttp/session', { headers: { 'x-relay-padding': padding } }))).status, 400);
+  }
+  assert.equal(calls, 1);
+});
+
+test('relay links retain the account UUID and cannot retain an origin download override', () => {
+  const id = '11111111-2222-3333-4444-555555555555';
+  const source = `vless://${id}@origin.example:443?type=xhttp&path=%2Fzvpn-xhttp%2F&extra=%7B%22downloadSettings%22%3A%7B%22address%22%3A%22origin.example%22%7D%7D`;
+  const link = new URL(makeRelayLink(source, 'test.netlify.app'));
+  assert.equal(link.username, id);
+  assert.equal(link.hostname, 'test.netlify.app');
+  assert.equal(link.searchParams.get('sni'), 'test.netlify.app');
+  assert.deepEqual(JSON.parse(link.searchParams.get('extra')), RELAY_EXTRA);
+  assert.throws(() => makeRelayLink(source, 'test.netlify.app.evil.example'));
+  assert.throws(() => makeRelayLink(source.replace('type=xhttp', 'type=tcp'), 'test.netlify.app'));
 });

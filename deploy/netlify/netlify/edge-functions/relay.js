@@ -3,6 +3,7 @@
 // https://github.com/avacocloud/XHTTP-Installer
 // ZVPN: forward only the existing XHTTP endpoint, without changing the VPN server.
 const PREFIX = "/zvpn-xhttp/";
+const PADDING_HEADER = "x-relay-padding";
 const STRIP_HEADERS = new Set([
   "host", "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
   "te", "trailer", "transfer-encoding", "upgrade", "forwarded", "cookie",
@@ -33,16 +34,26 @@ export function createRelay(targetOrigin, fetchUpstream = fetch) {
     }
     if (!["GET", "HEAD", "POST"].includes(request.method)) return response(405, "Method not allowed");
     if (!origin) return response(503, "Service not configured");
+    const relayPadding = request.headers.get(PADDING_HEADER);
+    if (relayPadding !== null && !/^X{100,1000}$/.test(relayPadding)) return response(400, "Invalid padding");
     const headers = new Headers();
     const connectionTokens = new Set((request.headers.get("connection") || "")
       .split(",").map(value => value.trim().toLowerCase()));
     for (const [key, value] of request.headers) {
       const lower = key.toLowerCase();
-      if (STRIP_HEADERS.has(lower) || connectionTokens.has(lower) ||
+      if (lower === PADDING_HEADER || STRIP_HEADERS.has(lower) || connectionTokens.has(lower) ||
           lower.startsWith("x-nf-") || lower.startsWith("x-netlify-")) continue;
       headers.set(key, value);
     }
     headers.set("accept-encoding", "identity");
+    // Netlify rejects the legacy Referer padding used by the current server.
+    // Translate the relay client's header here, preserving the original inbound
+    // and every existing direct client's configuration on the VPN server.
+    if (relayPadding !== null) {
+      const referrer = new URL(PREFIX, origin);
+      referrer.searchParams.set("x_padding", relayPadding);
+      headers.set("referer", referrer.href);
+    }
     try {
       const upstream = await fetchUpstream(new URL(url.pathname + url.search, origin), {
         method: request.method, headers, redirect: "manual", signal: request.signal,
@@ -54,6 +65,9 @@ export function createRelay(targetOrigin, fetchUpstream = fetch) {
         return response(502, "Upstream redirect rejected");
       }
       const output = new Headers(upstream.headers);
+      if (relayPadding !== null && /^X{100,1000}$/.test(output.get("x-padding") || "")) {
+        output.set(PADDING_HEADER, output.get("x-padding"));
+      }
       for (const key of ["transfer-encoding", "connection", "keep-alive", "set-cookie", "location", "content-length"]) output.delete(key);
       output.set("cache-control", "no-store");
       return new Response(upstream.body, { status: upstream.status, headers: output });

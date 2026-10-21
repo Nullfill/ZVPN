@@ -4,4 +4,4 @@ Source: https://github.com/avacocloud/XHTTP-Installer/blob/e36878fd1f7762a8efe48
 
 Copyright (C) 2025 avaco_cloud. GPL-3.0. See LICENSE, COPYING and NOTICE.
 
-ZVPN changes: restrict routing to the existing XHTTP endpoint; validate origin and session paths; preserve streaming; do not relay admin pages, cookies or proxy credentials. No server installer is included.
+ZVPN changes: restrict routing to the existing XHTTP endpoint; validate origin and session paths; preserve streaming; translate relay-client padding to the existing origin's format; generate account-preserving test links; do not relay admin pages, cookies or proxy credentials. No server installer is included.
