@@ -47,7 +47,9 @@ import importlib.util,pathlib,sys,json
 root=pathlib.Path(sys.argv[1])
 spec=importlib.util.spec_from_file_location('xray_apply','ops/helper/xray-apply.py')
 helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)
-helper.validate(json.loads((root/'server.json').read_text()))
+managed=json.loads((root/'server.json').read_text())
+managed['log']={'loglevel':'warning'}
+helper.validate(managed)
 probe=root/'helper-config-probe';probe.write_bytes((root/'empty.json').read_bytes())
 helper.test_config(str(root/'xray'),str(probe))
 probe.write_text('{invalid json')
