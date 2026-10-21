@@ -25,7 +25,7 @@ export function getBaseUrl(req = null) {
 
 function links(token, req = null) {
   const base = `${getBaseUrl(req)}/d/${token}`;
-  return { landing: base, android: `${base}/android`, ios: `${base}/ios`, windows: `${base}/windows`, windowsLauncher: `${base}/windows-launcher` };
+  return { landing: base, android: `${base}/android.sswan`, ios: `${base}/ios.mobileconfig`, windows: `${base}/windows`, windowsLauncher: `${base}/windows-launcher` };
 }
 
 export async function listUsers() {
