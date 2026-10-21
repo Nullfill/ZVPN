@@ -95,4 +95,9 @@ test('relay links retain the account UUID and cannot retain an origin download o
   assert.deepEqual(JSON.parse(link.searchParams.get('extra')), RELAY_EXTRA);
   assert.throws(() => makeRelayLink(source, 'test.netlify.app.evil.example'));
   assert.throws(() => makeRelayLink(source.replace('type=xhttp', 'type=tcp'), 'test.netlify.app'));
+  assert.throws(() => makeRelayLink(source, 'relay.example.com'));
+  assert.equal(new URL(makeRelayLink(source, 'relay.example.com', { allowCustomDomain: true })).hostname, 'relay.example.com');
+  for (const host of ['https://relay.example.com', 'relay.example.com:443', '127.0.0.1', 'relay.example.com/path']) {
+    assert.throws(() => makeRelayLink(source, host, { allowCustomDomain: true }));
+  }
 });
