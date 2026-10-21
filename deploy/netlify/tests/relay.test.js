@@ -17,7 +17,7 @@ test('only XHTTP session paths are forwarded; admin paths and encoded traversal 
 });
 test('POST bytes and XHTTP headers stream through; cookies and proxy credentials do not', async () => {
   const relay = createRelay('https://origin.example', async (url, init) => {
-    assert.equal(url.href, 'https://origin.example/zvpn-xhttp/session/123?x_padding=abc');
+    assert.equal(url.href, 'https://origin.example/zvpn-netlify/session/123?x_padding=abc');
     assert.equal(init.redirect, 'manual');
     assert.equal(init.headers.get('x-padding'), 'abcd');
     for (const h of ['host', 'cookie', 'authorization', 'proxy-authorization', 'x-nf-test', 'x-private']) {

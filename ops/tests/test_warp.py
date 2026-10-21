@@ -19,7 +19,7 @@ def sample():
 
 
 def core():
-    return {'inbounds': [{}, {}], 'outbounds': [{'tag': 'direct', 'protocol': 'freedom'}],
+    return {'inbounds': [{'protocol':'dokodemo-door'}, {'protocol':'vless'}, {'protocol':'vless'}], 'outbounds': [{'tag': 'direct', 'protocol': 'freedom'}],
             'policy': {'levels': {'0': {'statsUserUplink': True, 'statsUserDownlink': True}}},
             'routing': {'rules': [{'type': 'field', 'inboundTag': ['api-in'], 'outboundTag': 'api'}]}}
 
@@ -42,8 +42,9 @@ class WarpPolicyTests(unittest.TestCase):
         self.assertEqual(applied['outbounds'][0], original['outbounds'][0])
         self.assertEqual(applied['routing']['rules'][1]['outboundTag'], 'direct')
         for rule in applied['routing']['rules'][1:]:
-            self.assertEqual(rule['user'], ['zvpn-11111111-1111-4111-8111-111111111111'])
+            self.assertEqual(rule['user'], ['zvpn-11111111-1111-4111-8111-111111111111', 'zvpn-netlify-11111111-1111-4111-8111-111111111111'])
         self.assertTrue(applied['inbounds'][1]['sniffing']['routeOnly'])
+        self.assertTrue(applied['inbounds'][2]['sniffing']['routeOnly'])
         empty = sample(); empty['users'] = []
         self.assertEqual(policy.main_xray(original, empty), original)
         disabled = sample(); disabled['enabled'] = False

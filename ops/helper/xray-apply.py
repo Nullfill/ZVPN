@@ -11,18 +11,20 @@ def validate(data):
     assert data['policy'] == {'levels': {'0': {'statsUserUplink': True, 'statsUserDownlink': True}}}
     assert data['outbounds'] == [{'tag':'direct','protocol':'freedom'}]
     assert data['routing'] == {'rules':[{'type':'field','inboundTag':['api-in'],'outboundTag':'api'}]}
-    api,vless=data['inbounds']
+    api,direct,relay=data['inbounds']
     assert api == {'tag':'api-in','listen':'127.0.0.1','port':10086,'protocol':'dokodemo-door','settings':{'address':'127.0.0.1'}}
-    assert set(vless) == {'tag','listen','port','protocol','settings','streamSettings'}
-    assert (vless['tag'],vless['listen'],vless['port'],vless['protocol']) == ('zvpn-vless','127.0.0.1',10085,'vless')
-    assert vless['streamSettings'] == {'network':'xhttp','security':'none','xhttpSettings':{'path':'/zvpn-xhttp/','mode':'auto'}}
-    assert set(vless['settings']) == {'clients','decryption'} and vless['settings']['decryption'] == 'none'
-    seen=set()
-    for user in vless['settings']['clients']:
-        assert set(user) == {'id','email','level'} and user['level'] == 0
-        assert fullmatch('[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}',user['id'])
-        assert fullmatch('zvpn-[0-9a-f-]{36}',user['email']) and user['id'] not in seen
-        seen.add(user['id'])
+    for vless,tag,port,path,prefix in [(direct,'zvpn-vless',10085,'/zvpn-xhttp/','zvpn-'),(relay,'zvpn-netlify',10090,'/zvpn-netlify/','zvpn-netlify-')]:
+        assert set(vless) == {'tag','listen','port','protocol','settings','streamSettings'}
+        assert (vless['tag'],vless['listen'],vless['port'],vless['protocol']) == (tag,'127.0.0.1',port,'vless')
+        assert vless['streamSettings'] == {'network':'xhttp','security':'none','xhttpSettings':{'path':path,'mode':'auto'}}
+        assert set(vless['settings']) == {'clients','decryption'} and vless['settings']['decryption'] == 'none'
+        seen=set()
+        for user in vless['settings']['clients']:
+            assert set(user) == {'id','email','level'} and user['level'] == 0
+            assert fullmatch('[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}',user['id'])
+            assert fullmatch(prefix+'[0-9a-f-]{36}',user['email']) and user['id'] not in seen
+            seen.add(user['id'])
+    assert [(u['id'],u['email'].removeprefix('zvpn-')) for u in direct['settings']['clients']] == [(u['id'],u['email'].removeprefix('zvpn-netlify-')) for u in relay['settings']['clients']]
     return data
 
 def test_config(binary, path):

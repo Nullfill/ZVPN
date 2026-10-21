@@ -25,7 +25,8 @@ import { disconnectIkeId } from './vpn.js';
 import { runMigrations } from './migrate.js';
 import { syncSecretsNow, syncStatus } from './services/syncQueue.js';
 import { xrayLink } from './services/xrayConfig.js';
-import { netlifyLink, connectionLinks } from './services/netlifyConfig.js';
+import { netlifyLink } from './services/netlifyConfig.js';
+import { subscriptionInfo, subscriptionLinks } from './services/subscription.js';
 import { getXrayStatus } from './services/xray.js';
 import { getWarpStatus, reconnectWarp } from './services/warp.js';
 import { GEMINI_DOMAINS, ANTIGRAVITY_DOMAINS } from './services/warpDefaults.js';
@@ -104,7 +105,9 @@ app.get('/api/dashboard', requireAdmin, asyncHandler(async (req, res) => {
     one(`SELECT count(*)::int AS users, count(*) FILTER(WHERE enabled AND NOT quota_blocked AND (expires_at IS NULL OR expires_at>now()))::int AS active,
       count(*) FILTER(WHERE expires_at IS NOT NULL AND expires_at<=now())::int AS expired,
       COALESCE(sum(usage_total),0)::bigint AS bytes,
-      COALESCE(sum(xray_usage_bytes),0)::bigint AS xray_bytes FROM vpn_users`),
+      COALESCE(sum(xray_usage_bytes),0)::bigint AS xray_bytes,
+      COALESCE(sum(netlify_usage_bytes),0)::bigint AS netlify_bytes,
+      COALESCE(sum(xray_legacy_usage_bytes),0)::bigint AS legacy_bytes FROM vpn_users`),
     one(`SELECT COALESCE(sum(bytes),0)::bigint AS bytes FROM usage_daily WHERE usage_date=(now() AT TIME ZONE $1)::date`, [config.timezone]),
     one(`SELECT COALESCE(sum(bytes),0)::bigint AS bytes FROM usage_daily WHERE usage_date >= date_trunc('month', now() AT TIME ZONE $1)::date`, [config.timezone]),
   ]);
@@ -118,6 +121,8 @@ app.get('/api/dashboard', requireAdmin, asyncHandler(async (req, res) => {
   const sessions = getLiveSessions();
   res.json({
     totals: { ...totals, bytes: Number(totals.bytes), xrayBytes: Number(totals.xray_bytes),
+      netlifyBytes: Number(totals.netlify_bytes), legacyBytes: Number(totals.legacy_bytes),
+      directBytes: Math.max(0, Number(totals.xray_bytes) - Number(totals.netlify_bytes) - Number(totals.legacy_bytes)),
       ikeBytes: Math.max(0, Number(totals.bytes) - Number(totals.xray_bytes)), todayBytes: Number(today.bytes), monthBytes: Number(month.bytes), online: sessions.length },
     system: { load: os.loadavg()[0], memoryUsed: os.totalmem() - os.freemem(), memoryTotal: os.totalmem(), uptime: os.uptime(), disk, strongswan, cpuCount: os.cpus().length },
     recent: await many('SELECT username, last_seen_at, usage_total, created_at FROM vpn_users ORDER BY created_at DESC LIMIT 5'),
@@ -390,7 +395,7 @@ async function tokenUser(token) {
   return one(`SELECT * FROM vpn_users WHERE download_token=$1 AND download_token_revoked=false`, [token]);
 }
 
-app.get(['/d/:token/xray', '/d/:token/xray-subscription', '/d/:token/netlify', '/d/:token/netlify-subscription'], asyncHandler(async (req, res) => {
+app.get(['/d/:token/subscription', '/d/:token/xray', '/d/:token/xray-subscription', '/d/:token/netlify', '/d/:token/netlify-subscription'], asyncHandler(async (req, res) => {
   const user = await tokenUser(req.params.token);
   if (!user) return res.status(404).send('Invalid link');
   const settings = await getSettings();
@@ -399,9 +404,12 @@ app.get(['/d/:token/xray', '/d/:token/xray-subscription', '/d/:token/netlify', '
   const link = relayOnly ? netlifyLink(user, config.publicBaseUrl, settings.netlify) : xrayLink(user, config.publicBaseUrl);
   if (!link) return res.status(503).send('Netlify is disabled');
   res.set('Cache-Control', 'no-store');
-  res.set('subscription-userinfo', `upload=${user.upload_bytes || 0}; download=${user.download_bytes || 0}; total=${user.unlimited_traffic ? 0 : user.total_limit_bytes || 0}; expire=${user.expires_at ? Math.floor(new Date(user.expires_at).getTime()/1000) : 0}`);
-  if (req.path.endsWith('-subscription')) {
-    const links = relayOnly ? [link] : connectionLinks(user, config.publicBaseUrl, settings);
+  const info = subscriptionInfo(user);
+  res.set('subscription-userinfo', info.userinfo);
+  res.set('profile-title', `base64:${Buffer.from(`ZVPN ${user.username}`).toString('base64')}`);
+  res.set('profile-update-interval', '6');
+  if (req.path.endsWith('-subscription') || req.path.endsWith('/subscription')) {
+    const links = relayOnly ? [link, info.row] : subscriptionLinks(user, config.publicBaseUrl, settings);
     return res.type('text/plain').send(Buffer.from(links.join('\n')+'\n').toString('base64'));
   }
   res.set('Content-Disposition', `attachment; filename="${relayOnly ? 'zvpn-netlify' : 'zvpn-xray'}.txt"`);

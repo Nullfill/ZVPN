@@ -13,12 +13,13 @@ test('PostgreSQL: upgrade existing users, shared quota, idempotent collection an
       await client.query(`CREATE SCHEMA ${schema}`);await client.query(`SET search_path TO ${schema}, public`);
       await client.query(await fs.readFile(new URL('../../ops/schema.sql',import.meta.url),'utf8'));
       const migrations=await fs.readdir(new URL('../../ops/migrations/',import.meta.url));
-      for (const name of migrations.filter(n=>n.endsWith('.sql')&&!n.startsWith('008')).sort()) {
+      for (const name of migrations.filter(n=>n.endsWith('.sql')&&!n.startsWith('008')&&!n.startsWith('012')).sort()) {
         await client.query(await fs.readFile(new URL(`../../ops/migrations/${name}`,import.meta.url),'utf8'));
       }
       const {rows:[old]}=await client.query(`INSERT INTO vpn_users(username,secret_enc,duration_days,activation_status,
         usage_total,upload_bytes,download_bytes,total_limit_bytes,download_token) VALUES('existing-user','test-encrypted',30,'not_activated',300,100,200,500,'test-token') RETURNING *`);
       await client.query(await fs.readFile(new URL('../../ops/migrations/008_xray_shared_usage.sql',import.meta.url),'utf8'));
+      await client.query(await fs.readFile(new URL('../../ops/migrations/012_transport_usage.sql',import.meta.url),'utf8'));
       const upgraded=(await client.query('SELECT * FROM vpn_users WHERE id=$1',[old.id])).rows[0];
       assert.match(upgraded.xray_uuid,/^[0-9a-f-]{36}$/);assert.equal(upgraded.usage_total,'300');assert.equal(upgraded.duration_days,30);
       const record=async(up,down,epoch='boot-a')=>{

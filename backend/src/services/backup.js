@@ -224,8 +224,8 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
         if (u.xray_uuid && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u.xray_uuid)) {
           throw new Error('INVALID_XRAY_UUID');
         }
-        await client.query('UPDATE vpn_users SET xray_uuid=COALESCE($1::uuid,xray_uuid),xray_usage_bytes=$2 WHERE username=$3',
-          [u.xray_uuid || null, u.xray_usage_bytes || 0, u.username]);
+        await client.query('UPDATE vpn_users SET xray_uuid=COALESCE($1::uuid,xray_uuid),xray_usage_bytes=$2, netlify_usage_bytes=$4, xray_legacy_usage_bytes=$5 WHERE username=$3',
+          [u.xray_uuid || null, u.xray_usage_bytes || 0, u.username, u.netlify_usage_bytes || 0, u.xray_legacy_usage_bytes ?? Math.max(0, Number(u.xray_usage_bytes || 0) - Number(u.netlify_usage_bytes || 0))]);
       }
     }
 

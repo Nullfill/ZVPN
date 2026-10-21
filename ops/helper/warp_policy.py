@@ -64,13 +64,14 @@ def main_xray(config, policy):
         return data
     if policy['scope'] == 'selected' and not policy['users']:
         return data
-    data['inbounds'][1]['sniffing'] = sniffing()
+    for inbound in data['inbounds']:
+        if inbound['protocol'] == 'vless': inbound['sniffing'] = sniffing()
     data['outbounds'] += [
         {'tag': 'zvpn-warp-router', 'protocol': 'socks', 'settings': {
             'servers': [{'address': '127.0.0.1', 'port': 40001}]}},
         {'tag': 'zvpn-warp-quic', 'protocol': 'blackhole'},
     ]
-    user = {} if policy['scope'] == 'all' else {'user': ['zvpn-' + u['id'] for u in policy['users']]}
+    user = {} if policy['scope'] == 'all' else {'user': [prefix + u['id'] for u in policy['users'] for prefix in ('zvpn-', 'zvpn-netlify-')]}
     rules = data['routing']['rules']
     if policy['excludedDomains']:
         rules.append({'type': 'field', **user, 'domain': ['domain:' + d for d in policy['excludedDomains']], 'outboundTag': 'direct'})

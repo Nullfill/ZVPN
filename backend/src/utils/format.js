@@ -32,6 +32,9 @@ export function sanitizeUser(u, sessions = []) {
     unlimitedTraffic: u.unlimited_traffic, maxDevices: u.max_devices,
     usageTotal: Number(u.usage_total), uploadBytes: Number(u.upload_bytes || 0), downloadBytes: Number(u.download_bytes || 0),
     xrayUsageBytes: Number(u.xray_usage_bytes || 0),
+    netlifyUsageBytes: Number(u.netlify_usage_bytes || 0),
+    xrayLegacyUsageBytes: Number(u.xray_legacy_usage_bytes || 0),
+    xrayDirectUsageBytes: Math.max(0, Number(u.xray_usage_bytes || 0) - Number(u.netlify_usage_bytes || 0) - Number(u.xray_legacy_usage_bytes || 0)),
     ikeUsageBytes: Math.max(0, Number(u.usage_total || 0) - Number(u.xray_usage_bytes || 0)),
     todayBytes: Number(u.today_bytes || 0),
     remainingTraffic: u.unlimited_traffic || !u.total_limit_bytes ? null : Math.max(0, Number(u.total_limit_bytes) - Number(u.usage_total)),
@@ -55,6 +58,6 @@ export function downloadLinks(token, req = null) {
   }
   const root = `${base.replace(/\/$/, '')}/d/${token}`;
   return { landing: root, android: `${root}/android`, ios: `${root}/ios`, windows: `${root}/windows`, windowsLauncher: `${root}/windows-launcher`,
-    xray: `${root}/xray`, xraySubscription: `${root}/xray-subscription`,
+    subscription: `${root}/subscription`, xray: `${root}/xray`, xraySubscription: `${root}/xray-subscription`,
     netlify: `${root}/netlify`, netlifySubscription: `${root}/netlify-subscription` };
 }

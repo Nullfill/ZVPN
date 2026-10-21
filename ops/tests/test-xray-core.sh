@@ -36,14 +36,18 @@ fs.writeFileSync(root+'/client.json',JSON.stringify({
   outbounds:[{protocol:'vless',settings:{vnext:[{address:'127.0.0.1',port:15443,users:[{id:user.xray_uuid,encryption:'none'}]}]},
     streamSettings:{network:'xhttp',security:'tls',tlsSettings:{serverName:'localhost',fingerprint:'chrome',pinnedPeerCertSha256:pin},
       xhttpSettings:{path:'/zvpn-xhttp/',mode:'packet-up'}}}],log:{loglevel:'debug'}}));
+const relay=JSON.parse(fs.readFileSync(root+'/client.json'));relay.inbounds[0].port=11081;
+relay.outbounds[0].streamSettings.xhttpSettings.path='/zvpn-netlify/';
+fs.writeFileSync(root+'/relay-client.json',JSON.stringify(relay));
 JS
 "$WORK/xray" run -test -config "$WORK/server.json"
 # Exercise the production helper with an extensionless temporary file too.
 python3 - "$WORK" <<'PY'
-import importlib.util,pathlib,sys
+import importlib.util,pathlib,sys,json
 root=pathlib.Path(sys.argv[1])
 spec=importlib.util.spec_from_file_location('xray_apply','ops/helper/xray-apply.py')
 helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)
+helper.validate(json.loads((root/'server.json').read_text()))
 probe=root/'helper-config-probe';probe.write_bytes((root/'empty.json').read_bytes())
 helper.test_config(str(root/'xray'),str(probe))
 probe.write_text('{invalid json')
@@ -82,11 +86,19 @@ for attempt in {1..5}; do
   sleep 1
 done
 [[ "$(wc -c < "$WORK/response")" -eq 1048576 ]] || { cat "$WORK/server.log" "$WORK/client.log" "$WORK/nginx.log"; exit 1; }
+"$WORK/xray" run -config "$WORK/relay-client.json" > "$WORK/relay-client.log" 2>&1 &
+PIDS+=("$!")
+for attempt in {1..5}; do
+  if curl --fail --silent --show-error --max-time 10 --noproxy '' --socks5-hostname 127.0.0.1:11081 http://127.0.0.1:18080 > "$WORK/relay-response"; then break; fi
+  sleep 1
+done
+[[ "$(wc -c < "$WORK/relay-response")" -eq 1048576 ]] || { cat "$WORK/server.log" "$WORK/relay-client.log"; exit 1; }
 "$WORK/xray" api statsquery --server=127.0.0.1:10086 -pattern 'user>>>' > "$WORK/stats.json"
 node --input-type=module - "$WORK/stats.json" <<'JS'
 import fs from 'node:fs';import assert from 'node:assert/strict';import {parseXrayStats} from './backend/src/services/xrayConfig.js';
 const stats=parseXrayStats(JSON.parse(fs.readFileSync(process.argv[2])));
-assert.equal(stats.size,1);assert.ok([...stats.values()][0].downlink>=1048576n);
+assert.equal(stats.size,2);for(const counter of stats.values())assert.ok(counter.downlink>=1048576n);
+assert.equal([...stats.values()].filter(x=>x.transport==='netlify').length,1);
 console.log('TLS/XHTTP connection and per-user traffic confirmed');
 JS
 # Hard revocation includes established streams because the core is restarted.
@@ -97,4 +109,7 @@ sleep 1
 if curl --fail --silent --max-time 5 --noproxy '' --socks5-hostname 127.0.0.1:11080 http://127.0.0.1:18080 >/dev/null; then
   echo 'Revoked user still connected' >&2;exit 1
 fi
-echo 'Revocation verified'
+if curl --fail --silent --max-time 5 --noproxy '' --socks5-hostname 127.0.0.1:11081 http://127.0.0.1:18080 >/dev/null; then
+  echo 'Revoked relay user still connected' >&2;exit 1
+fi
+echo 'Revocation verified for direct and relay connections'

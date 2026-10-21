@@ -304,13 +304,12 @@ export async function downloadPageHtml(user, links, settings) {
   let xray = null;
   let qr = null;
   let relay = null;
-  let relayQr = null;
+  const subscriptionUrl = `${links.landing}/subscription`;
   if (settings?.xray?.enabled !== false && user.xray_uuid) {
     try {
       xray = xrayLink(user, config.publicBaseUrl);
-      qr = await QRCode.toDataURL(xray, { width: 240, margin: 2 });
+      qr = await QRCode.toDataURL(subscriptionUrl, { width: 240, margin: 2 });
       relay = netlifyLink(user, config.publicBaseUrl, settings?.netlify);
-      if (relay) relayQr = await QRCode.toDataURL(relay, { width: 240, margin: 2 });
     } catch { /* TLS has not been configured yet; never advertise insecure links. */ }
   }
 
@@ -376,7 +375,9 @@ a.btn.alt{background:rgba(255,255,255,.1)}a.btn span{font-size:.78rem;opacity:.8
 
     <div class="usage">
       <h3>جزئیات مصرف</h3>
-      <div class="row"><span>مصرف Xray</span><span dir="ltr">${fmtPortalBytes(user.xray_usage_bytes || 0)}</span></div>
+      <div class="row"><span>مصرف Xray مستقیم</span><span dir="ltr">${fmtPortalBytes(Math.max(0, Number(user.xray_usage_bytes || 0) - Number(user.netlify_usage_bytes || 0) - Number(user.xray_legacy_usage_bytes || 0)))}</span></div>
+      <div class="row"><span>مصرف Netlify</span><span dir="ltr">${fmtPortalBytes(user.netlify_usage_bytes || 0)}</span></div>
+      ${Number(user.xray_legacy_usage_bytes || 0) ? `<div class="row"><span>Xray پیش از تفکیک</span><span dir="ltr">${fmtPortalBytes(user.xray_legacy_usage_bytes)}</span></div>` : ''}
       <div class="row"><span>مصرف IKEv2</span><span dir="ltr">${fmtPortalBytes(Math.max(0, totalUsed - Number(user.xray_usage_bytes || 0)))}</span></div>
       <p class="muted">مصرف IKEv2 و Xray از یک سهمیه مشترک کم می‌شود.</p>
       <div class="row">
@@ -404,23 +405,20 @@ a.btn.alt{background:rgba(255,255,255,.1)}a.btn span{font-size:.78rem;opacity:.8
   </div>
 
   ${xray ? `<div class="card section">
-    <h2>اتصال Xray — VLESS</h2>
-    <p class="sub">اعتبار و حجم این اتصال با IKEv2 مشترک است. کانفیگ را در برنامه سازگار با XHTTP وارد کنید.</p>
-    <textarea id="xray-config" readonly dir="ltr" style="width:100%;min-height:100px;margin:14px 0;padding:12px;border-radius:12px;overflow-wrap:anywhere">${htmlEsc(xray)}</textarea>
-    <div class="btns"><button type="button" onclick="navigator.clipboard.writeText(document.getElementById('xray-config').value).then(()=>this.textContent='کپی شد').catch(()=>document.getElementById('xray-config').select())">کپی کانفیگ</button>
-    <a class="btn alt" href="${htmlEsc(links.landing)}/xray">دانلود کانفیگ</a>
-    <a class="btn alt" href="${htmlEsc(links.landing)}/xray-subscription">لینک اشتراک Xray</a></div>
-    <img src="${qr}" width="240" height="240" alt="QR کانفیگ Xray" style="display:block;margin:16px auto;border-radius:12px">
-  </div>` : ''}
-
-  ${relay ? `<div class="card section">
-    <h2>اتصال از واسط Netlify</h2>
-    <p class="sub">اگر اتصال مستقیم روی اینترنت شما باز نمی‌شود، این کانفیگ را در برنامه سازگار با XHTTP وارد کنید. حجم و تاریخ اعتبار با سایر اتصال‌های شما مشترک است.</p>
-    <textarea id="netlify-config" readonly dir="ltr" style="width:100%;min-height:100px;margin:14px 0;padding:12px;border-radius:12px;overflow-wrap:anywhere">${htmlEsc(relay)}</textarea>
-    <div class="btns"><button type="button" onclick="navigator.clipboard.writeText(document.getElementById('netlify-config').value).then(()=>this.textContent='کپی شد').catch(()=>document.getElementById('netlify-config').select())">کپی کانفیگ Netlify</button>
-    <a class="btn" href="${htmlEsc(links.landing)}/netlify">دانلود کانفیگ Netlify</a>
-    <a class="btn alt" href="${htmlEsc(links.landing)}/netlify-subscription">اشتراک Netlify</a></div>
-    <img src="${relayQr}" width="240" height="240" alt="QR کانفیگ Netlify" style="display:block;margin:16px auto;border-radius:12px">
+    <h2>اشتراک اتصال — Xray${relay ? ' و Netlify' : ''}</h2>
+    <p class="sub">این لینک را به‌عنوان اشتراک در برنامه سازگار با XHTTP وارد کنید؛ ${relay ? 'هر دو اتصال مستقیم و Netlify یکجا اضافه می‌شوند' : 'اتصال مستقیم اضافه می‌شود'}. حجم و اعتبار با IKEv2 مشترک است.</p>
+    <input id="subscription-url" readonly dir="ltr" value="${htmlEsc(subscriptionUrl)}" style="width:100%;margin:14px 0;padding:14px;border-radius:12px">
+    <div class="btns"><button type="button" onclick="navigator.clipboard.writeText(document.getElementById('subscription-url').value).then(()=>this.textContent='لینک اشتراک کپی شد').catch(()=>document.getElementById('subscription-url').select())">کپی لینک اشتراک</button>
+    <a class="btn" href="${htmlEsc(subscriptionUrl)}">دریافت اشتراک${relay ? ' مستقیم و Netlify' : ''}</a></div>
+    <img src="${qr}" width="240" height="240" alt="QR لینک اشتراک" style="display:block;margin:16px auto;border-radius:12px">
+    <p class="sub">ردیف «اطلاعات اشتراک» در فهرست کانفیگ‌ها، حجم باقی‌مانده و اعتبار را نشان می‌دهد و برای اتصال نیست. برای تازه‌شدن این اطلاعات، اشتراک را در برنامه بروزرسانی کنید.</p>
+    <details style="margin-top:18px"><summary>دریافت جداگانه کانفیگ‌ها</summary>
+      <p>اتصال مستقیم</p>
+      <textarea id="xray-config" readonly dir="ltr" style="width:100%;min-height:100px;padding:12px;border-radius:12px;overflow-wrap:anywhere">${htmlEsc(xray)}</textarea>
+      <a class="btn alt" href="${htmlEsc(links.landing)}/xray">دانلود کانفیگ مستقیم</a>
+      ${relay ? `<p>اتصال Netlify</p><textarea id="netlify-config" readonly dir="ltr" style="width:100%;min-height:100px;padding:12px;border-radius:12px;overflow-wrap:anywhere">${htmlEsc(relay)}</textarea>
+      <a class="btn alt" href="${htmlEsc(links.landing)}/netlify">دانلود کانفیگ Netlify</a>` : ''}
+    </details>
   </div>` : ''}
 
   <div class="card section">

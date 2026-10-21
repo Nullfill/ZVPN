@@ -26,6 +26,9 @@ export function buildXrayConfig(users, enabled = true) {
       { tag: XRAY_TAG, listen: '127.0.0.1', port: XRAY_PORT, protocol: 'vless',
         settings: { clients: enabled ? users.filter((u) => eligibleUser(u)).map(xrayIdentity) : [], decryption: 'none' },
         streamSettings: { network: 'xhttp', security: 'none', xhttpSettings: { path: '/zvpn-xhttp/', mode: 'auto' } } },
+      { tag: 'zvpn-netlify', listen: '127.0.0.1', port: 10090, protocol: 'vless',
+        settings: { clients: enabled ? users.filter(u => eligibleUser(u)).map(u => ({ ...xrayIdentity(u), email: `zvpn-netlify-${u.id}` })) : [], decryption: 'none' },
+        streamSettings: { network: 'xhttp', security: 'none', xhttpSettings: { path: '/zvpn-netlify/', mode: 'auto' } } },
     ],
     outbounds: [{ tag: 'direct', protocol: 'freedom' }],
     routing: { rules: [{ type: 'field', inboundTag: ['api-in'], outboundTag: 'api' }] },
@@ -44,14 +47,15 @@ export function xrayLink(user, baseUrl) {
 export function parseXrayStats(data) {
   const result = new Map();
   for (const stat of data.stat || []) {
-    const match = /^user>>>zvpn-([0-9a-f-]{36})>>>traffic>>>(uplink|downlink)$/.exec(stat.name || '');
-    if (!match || !UUID_RE.test(match[1])) continue;
+    const match = /^user>>>zvpn-(netlify-)?([0-9a-f-]{36})>>>traffic>>>(uplink|downlink)$/.exec(stat.name || '');
+    if (!match || !UUID_RE.test(match[2])) continue;
     if (typeof stat.value === 'number' && !Number.isSafeInteger(stat.value)) throw new Error('INVALID_XRAY_COUNTER');
     const value = BigInt(stat.value ?? 0);
     if (value < 0n) throw new Error('INVALID_XRAY_COUNTER');
-    const item = result.get(match[1]) || { uplink: 0n, downlink: 0n };
-    item[match[2]] = value;
-    result.set(match[1], item);
+    const key = match[1] ? `${match[2]}:netlify` : match[2];
+    const item = result.get(key) || { uplink: 0n, downlink: 0n, ...(match[1] ? { userId: match[2], transport: 'netlify' } : {}) };
+    item[match[3]] = value;
+    result.set(key, item);
   }
   return result;
 }

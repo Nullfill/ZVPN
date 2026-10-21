@@ -67,7 +67,7 @@ async function readXrayUsage() {
   const hour = new Date(); hour.setMinutes(0, 0, 0);
   for (const [id, counter] of [...counters].sort(([a], [b]) => a.localeCompare(b))) {
     await tx(async (client) => {
-      await recordXrayCounters(client, id, counter, before, today, hour.toISOString());
+      await recordXrayCounters(client, counter.userId || id, counter, before, today, hour.toISOString());
     });
   }
   lastUsageAt = Date.now();

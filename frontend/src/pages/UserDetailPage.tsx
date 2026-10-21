@@ -1,3 +1,4 @@
+import TrafficBreakdown from '../components/TrafficBreakdown';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -96,7 +97,7 @@ export default function UserDetailPage() {
           </div>
           <ProgressBar value={totalPct} />
           <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-            <div><span className="text-xs text-slate-400 block mb-1">مصرف Xray</span><p dir="ltr" className="font-mono text-cyan-400">{fmtBytes(u.xrayUsageBytes || 0)}</p></div>
+            <div><span className="text-xs text-slate-400 block mb-1">مجموع Xray و Netlify</span><p dir="ltr" className="font-mono text-cyan-400">{fmtBytes(u.xrayUsageBytes || 0)}</p></div>
             <div><span className="text-xs text-slate-400 block mb-1">مصرف IKEv2</span><p dir="ltr" className="font-mono text-indigo-400">{fmtBytes(u.ikeUsageBytes || 0)}</p></div>
             <div>
               <span className="text-xs text-slate-400 block mb-1">مصرف روزانه</span>
@@ -134,6 +135,7 @@ export default function UserDetailPage() {
         </GlassCard>
       </div>
 
+      <TrafficBreakdown total={u.usageTotal} ike={u.ikeUsageBytes||0} direct={u.xrayDirectUsageBytes||0} netlify={u.netlifyUsageBytes||0} legacy={u.xrayLegacyUsageBytes||0} />
       <GlassCard>
         <h3 className="mb-4 font-bold">مصرف ۳۰ روز</h3>
         <div className="h-48">

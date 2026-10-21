@@ -77,7 +77,7 @@ export async function updateUser(id, data) {
       Object.hasOwn(data, 'unlimitedTraffic'), Boolean(data.unlimitedTraffic), data.maxDevices ?? null, Object.hasOwn(data, 'note'), data.note ?? null,
       Boolean(data.resetUsage), id]);
   if (data.resetUsage) {
-    await db.query('UPDATE vpn_users SET usage_total=0, xray_usage_bytes=0, upload_bytes=0, download_bytes=0 WHERE id=$1', [id]);
+    await db.query('UPDATE vpn_users SET usage_total=0, xray_usage_bytes=0, netlify_usage_bytes=0, xray_legacy_usage_bytes=0, upload_bytes=0, download_bytes=0 WHERE id=$1', [id]);
     await db.query('DELETE FROM usage_daily WHERE user_id=$1', [id]);
   }
   queueSyncSecrets();

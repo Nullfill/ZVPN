@@ -1,3 +1,4 @@
+import TrafficBreakdown from '../components/TrafficBreakdown';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -36,7 +37,7 @@ export default function UsersPage() {
       !filter || (filter==='online' ? u.online>0 : filter==='ended' ? u.ended : filter==='stale' ? u.ended && u.endedDays!==null && u.endedDays>=staleDays :
       filter==='active' ? ['active','expiring_soon'].includes(u.status) : u.status===filter)));
     return result.sort((a,b)=>sort==='oldest-ended' ? (a.endedAt ? Date.parse(a.endedAt):Infinity)-(b.endedAt?Date.parse(b.endedAt):Infinity) :
-      sort==='name' ? a.username.localeCompare(b.username,'fa') : sort==='last-seen' ? Date.parse(b.lastSeenAt||'1970-01-01')-Date.parse(a.lastSeenAt||'1970-01-01') : Date.parse(b.createdAt)-Date.parse(a.createdAt));
+      sort==='netlify' ? (b.netlifyUsageBytes||0)-(a.netlifyUsageBytes||0) : sort==='xray' ? (b.xrayDirectUsageBytes||0)-(a.xrayDirectUsageBytes||0) : sort==='traffic' ? b.usageTotal-a.usageTotal : sort==='name' ? a.username.localeCompare(b.username,'fa') : sort==='last-seen' ? Date.parse(b.lastSeenAt||'1970-01-01')-Date.parse(a.lastSeenAt||'1970-01-01') : Date.parse(b.createdAt)-Date.parse(a.createdAt));
   }, [users,search,filter,sort,staleDays]);
   const managedUser=users.find(u=>u.id===actionsUser?.id)||null;
   const pages=Math.max(1,Math.ceil(matches.length/25));
@@ -78,6 +79,7 @@ export default function UsersPage() {
             <item.Icon size={22} className={item.color}/>
           </button>)}
       </div>
+      <TrafficBreakdown title="آمار مصرف همه کاربران" total={users.reduce((n,u)=>n+u.usageTotal,0)} ike={users.reduce((n,u)=>n+(u.ikeUsageBytes||0),0)} direct={users.reduce((n,u)=>n+(u.xrayDirectUsageBytes||0),0)} netlify={users.reduce((n,u)=>n+(u.netlifyUsageBytes||0),0)} legacy={users.reduce((n,u)=>n+(u.xrayLegacyUsageBytes||0),0)} />
       <GlassCard className="space-y-4 !p-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-[180px] flex-1">
@@ -91,7 +93,7 @@ export default function UsersPage() {
             <option value="disabled">غیرفعال</option><option value="not_activated">در انتظار اولین اتصال</option>
           </select>
           <select aria-label="مرتب‌سازی کاربران" className="input !w-auto" value={sort} onChange={e=>setSort(e.target.value)}>
-            <option value="newest">جدیدترین کاربران</option><option value="oldest-ended">قدیمی‌ترین پایان اشتراک</option>
+            <option value="traffic">بیشترین مصرف کل</option><option value="netlify">بیشترین مصرف Netlify</option><option value="xray">بیشترین مصرف Xray مستقیم</option><option value="newest">جدیدترین کاربران</option><option value="oldest-ended">قدیمی‌ترین پایان اشتراک</option>
             <option value="last-seen">آخرین فعالیت</option><option value="name">نام کاربری</option>
           </select>
         </div>
@@ -130,7 +132,7 @@ export default function UsersPage() {
               <div className="flex items-baseline justify-between gap-2 text-xs"><span className="text-muted xl:hidden">مصرف کل</span><span dir="ltr" className="font-mono"><b>{fmtBytes(u.usageTotal)}</b> <span className="text-muted">/ {u.unlimitedTraffic||!u.totalLimitBytes?'∞':fmtBytes(u.totalLimitBytes)}</span></span></div>
               {!u.unlimitedTraffic && !!u.totalLimitBytes && <ProgressBar value={u.usageTotal/u.totalLimitBytes*100}/>}
               <p className="pt-1 text-[11px] text-muted">امروز: {fmtBytes(u.todayBytes)}{u.dailyLimitBytes && !u.unlimitedTraffic?` از ${fmtBytes(u.dailyLimitBytes)}`:''}</p>
-              <p className="text-[11px] text-muted" dir="ltr">IKEv2 {fmtBytes(u.ikeUsageBytes||0)} آ· Xray {fmtBytes(u.xrayUsageBytes||0)}</p>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]" dir="ltr"><span className="text-indigo-300">IKEv2 {fmtBytes(u.ikeUsageBytes||0)}</span><span className="text-cyan-300">Xray {fmtBytes(u.xrayDirectUsageBytes||0)}</span><span className="text-emerald-300">Netlify {fmtBytes(u.netlifyUsageBytes||0)}</span>{!!u.xrayLegacyUsageBytes && <span className="text-muted" title="مصرف Xray پیش از تفکیک مسیرها">قبلی {fmtBytes(u.xrayLegacyUsageBytes)}</span>}</div>
             </div>
             <div className="col-start-2 space-y-2 xl:col-start-auto">
               <span className={statusBadge(u.status)}>{u.endedReason==='date_and_traffic'?'زمان و حجم تمام شده':statusLabel(u.status)}</span>

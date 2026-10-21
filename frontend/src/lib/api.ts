@@ -60,6 +60,9 @@ export interface VpnUser {
   maxDevices: number;
   usageTotal: number;
   xrayUsageBytes: number;
+  netlifyUsageBytes: number;
+  xrayDirectUsageBytes: number;
+  xrayLegacyUsageBytes: number;
   ikeUsageBytes: number;
   uploadBytes: number;
   downloadBytes: number;

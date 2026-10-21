@@ -3,6 +3,7 @@
 // https://github.com/avacocloud/XHTTP-Installer
 // ZVPN: forward only the existing XHTTP endpoint, without changing the VPN server.
 const PREFIX = "/zvpn-xhttp/";
+const ORIGIN_PREFIX = "/zvpn-netlify/";
 const PADDING_HEADER = "x-relay-padding";
 const STRIP_HEADERS = new Set([
   "host", "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -50,12 +51,12 @@ export function createRelay(targetOrigin, fetchUpstream = fetch) {
     // Translate the relay client's header here, preserving the original inbound
     // and every existing direct client's configuration on the VPN server.
     if (relayPadding !== null) {
-      const referrer = new URL(PREFIX, origin);
+      const referrer = new URL(ORIGIN_PREFIX, origin);
       referrer.searchParams.set("x_padding", relayPadding);
       headers.set("referer", referrer.href);
     }
     try {
-      const upstream = await fetchUpstream(new URL(url.pathname + url.search, origin), {
+      const upstream = await fetchUpstream(new URL(ORIGIN_PREFIX + suffix + url.search, origin), {
         method: request.method, headers, redirect: "manual", signal: request.signal,
         ...(request.method === "POST" ? { body: request.body } : {}),
       });
