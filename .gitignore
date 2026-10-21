@@ -55,7 +55,11 @@ clients/windows/build/
 clients/windows/dist/
 clients/windows/*.spec
 clients/windows/ZVPN-Windows-Client.exe
-backend/public/
+backend/public/*
+!backend/public/portal/
+backend/public/portal/*
+!backend/public/portal/*.woff2
+!backend/public/portal/OFL.txt
 __pycache__/
 *.pyc
 
