@@ -29,7 +29,7 @@ export default function IkeRelaySettings() {
         const inbound = fragment.inbounds[0], rule = fragment.routing.rules[0];
         const owned = new Set([inbound.tag]);
         const legacy = input.inbounds.find(v => v.tag === `ir-ike-test-${inbound.port}` && v.protocol === 'tunnel'
-          && v.settings?.rewriteAddress === inbound.settings.rewriteAddress && v.settings?.rewritePort === 4500);
+          && v.settings?.allowedNetwork === 'udp' && v.settings?.rewritePort === 4500);
         if (legacy) owned.add(legacy.tag);
         if (!input.outbounds.some(v => v.tag === rule.outboundTag)) return toast('خروجی انتخاب‌شده در تنظیمات پنل ایران وجود ندارد.', 'error');
         if (input.inbounds.some(v => !owned.has(v.tag) && String(v.port) === String(inbound.port))) return toast('این پورت در قالب فعلی استفاده شده است؛ پورت دیگری انتخاب کنید.', 'error');

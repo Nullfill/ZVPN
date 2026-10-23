@@ -138,6 +138,8 @@ def apply(policy):
         if not policy['enabled']:
             # Only this identity is terminated; native users stay connected.
             subprocess.run(['ipsec', 'down', 'zvpn-ike-relay'], capture_output=True, timeout=15)
+            if adopt_legacy or (legacy.is_file() and legacy.read_text().startswith('# Superseded by the managed ZVPN relay.')):
+                subprocess.run(['ipsec', 'down', 'ikev2-ir-test'], capture_output=True, timeout=15)
         write(STATE, json.dumps(policy))
         info = run(['openssl', 'x509', '-in', str(CERT), '-noout', '-enddate', '-fingerprint', '-sha256']) if policy['enabled'] else None
         status = {**policy, 'ready': bool(policy['enabled']), 'certificate': info, 'error': None}

@@ -41,7 +41,7 @@ export function mergeRelayTemplate(original, fragment) {
   const next = structuredClone(original), inbound = fragment.inbounds[0];
   const owned = new Set([inbound.tag]);
   const legacy = next.inbounds.find(v => v.tag === `ir-ike-test-${inbound.port}` && v.protocol === 'tunnel'
-    && v.settings?.rewriteAddress === inbound.settings.rewriteAddress && v.settings?.rewritePort === 4500);
+    && v.settings?.allowedNetwork === 'udp' && v.settings?.rewritePort === 4500);
   if (legacy) owned.add(legacy.tag);
   if (!next.outbounds.some(v => v.tag === fragment.routing.rules[0].outboundTag)) throw new Error('RELAY_OUTBOUND_NOT_FOUND');
   if (next.inbounds.some(v => !owned.has(v.tag) && String(v.port) === String(inbound.port))) throw new Error('RELAY_PORT_IN_USE');

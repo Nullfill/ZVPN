@@ -33,6 +33,11 @@ test('template merge retains the control API and all existing clients, is idempo
   assert.equal(input.inbounds.length, 2);
   assert.throws(() => mergeRelayTemplate({ ...input, outbounds: [] }, fragment), /OUTBOUND_NOT_FOUND/);
   assert.throws(() => mergeRelayTemplate({ ...input, inbounds: [...input.inbounds, { port: 14450 }] }, fragment), /PORT_IN_USE/);
+  const legacy = { ...input, inbounds: [...input.inbounds, { ...fragment.inbounds[0], tag: 'ir-ike-test-14450',
+    settings: { ...fragment.inbounds[0].settings, rewriteAddress: '203.0.113.20' } }] };
+  const migrated = mergeRelayTemplate(legacy, fragment);
+  assert.equal(migrated.inbounds.length, 3);
+  assert.equal(migrated.inbounds[2].settings.rewriteAddress, 'vpn.example.com');
 });
 
 test('relay identity, not a shared proxy IP, determines the usage category', () => {
