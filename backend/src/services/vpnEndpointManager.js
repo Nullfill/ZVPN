@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { db, one, many } from '../db.js';
 import { getSetting, updateSettings } from './settings.js';
 import { invalidateVpnConfigCache } from './vpnConfig.js';
+import { syncIkeRelay } from './ikeRelay.js';
 
 const execFileAsync = promisify(execFile);
 const IP_RE = /^(?:\d{1,3}\.){3}\d{1,3}$/;
@@ -200,6 +201,7 @@ export async function applyEndpointChange({ endpoint, confirmNewCert, adminId })
     }
     await helper(['set-leftid', parsed.remoteId]);
     await helper(['normalize-conn']);
+    await syncIkeRelay(true);
     await helper(['restart-strongswan'], 90000);
 
     await updateSettings('vpn', {
@@ -233,7 +235,7 @@ export async function applyEndpointChange({ endpoint, confirmNewCert, adminId })
     };
   } catch (e) {
     if (backupPath) {
-      try { await helper(['endpoint-rollback', backupPath], 120000); } catch (rb) {
+      try { await helper(['endpoint-rollback', backupPath], 120000); await syncIkeRelay(true); } catch (rb) {
         console.error('[endpoint rollback]', rb.message);
       }
     }

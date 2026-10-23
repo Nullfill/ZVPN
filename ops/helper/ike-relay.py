@@ -74,6 +74,10 @@ def certificate_matches(hostname):
     try:
         run(['openssl', 'verify', '-CAfile', str(CA), str(CERT)])
         run(['openssl', 'x509', '-in', str(CERT), '-checkend', '604800', '-noout'])
+        certificate_key = run(['openssl', 'x509', '-in', str(CERT), '-pubkey', '-noout']).strip()
+        server_key = run(['openssl', 'pkey', '-in', str(KEY), '-pubout']).strip()
+        if certificate_key != server_key:
+            return False
         san = run(['openssl', 'x509', '-in', str(CERT), '-noout', '-ext', 'subjectAltName'])
         return 'DNS:' + hostname in [v.strip() for v in san.splitlines()[-1].split(',')]
     except subprocess.SubprocessError:

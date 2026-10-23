@@ -142,7 +142,7 @@ async function tick() {
   try {
     if (Date.now() - lastRelayCheck > 3600000) {
       lastRelayCheck = Date.now();
-      await syncIkeRelay().catch(error => console.error('[ike-relay sync]', error.message));
+      await syncIkeRelay(true).catch(error => console.error('[ike-relay sync]', error.message));
     }
     try { await collectXrayUsage(); } catch (error) {
       console.error('[xray usage]', error.message);

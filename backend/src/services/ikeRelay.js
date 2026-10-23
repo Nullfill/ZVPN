@@ -32,10 +32,10 @@ async function provision(policy) {
   applied = JSON.stringify(policy);
   appliedAt = Date.now();
 }
-export function syncIkeRelay() {
+export function syncIkeRelay(force = false) {
   return serialize(async () => {
     const policy = relayPolicy(await getSetting('ikeRelay'));
-    if (JSON.stringify(policy) !== applied || Date.now() - appliedAt > 6 * 3600000) await provision(policy);
+    if (force || JSON.stringify(policy) !== applied || Date.now() - appliedAt > 6 * 3600000) await provision(policy);
   });
 }
 export function applyIkeRelay(patch) {
