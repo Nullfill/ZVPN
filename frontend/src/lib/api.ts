@@ -64,6 +64,7 @@ export interface VpnUser {
   xrayDirectUsageBytes: number;
   xrayLegacyUsageBytes: number;
   ikeUsageBytes: number;
+  ikeRelayUsageBytes: number;
   uploadBytes: number;
   downloadBytes: number;
   todayBytes: number;

@@ -6,6 +6,27 @@ spec=importlib.util.spec_from_file_location('restore',ROOT/'ops/restore-full-bac
 restore=importlib.util.module_from_spec(spec);spec.loader.exec_module(restore)
 
 class FullBackupTests(unittest.TestCase):
+    def test_enabled_ike_relay_requires_its_original_certificate_and_connection(self):
+        data, _ = self.snapshot()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            restore.safe_extract(data, root)
+            state = root/'warp-policy/ike-relay.json'
+            state.parent.mkdir(parents=True)
+            state.write_text(json.dumps({'enabled': True, 'hostname': 'ir.example.com'}))
+            manifest = json.loads((root/'manifest.json').read_text())
+            manifest['checksums']['warp-policy/ike-relay.json'] = hashlib.sha256(state.read_bytes()).hexdigest()
+            (root/'manifest.json').write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, 'Incomplete relay backup'):
+                restore.verify_snapshot(root)
+            for name in ('ipsec.d/zvpn-ike-relay.conf', 'ipsec.d/certs/zvpn-ike-relay-cert.pem'):
+                target = root/name
+                target.parent.mkdir(exist_ok=True, parents=True)
+                target.write_bytes(b'original relay material')
+                manifest['checksums'][name] = hashlib.sha256(target.read_bytes()).hexdigest()
+            (root/'manifest.json').write_text(json.dumps(manifest))
+            restore.verify_snapshot(root)
+
     def test_relay_source_backup_excludes_cli_credentials_and_private_user_links(self):
         spec=importlib.util.spec_from_file_location('collector',ROOT/'ops/full-backup.py')
         collector=importlib.util.module_from_spec(spec);spec.loader.exec_module(collector)

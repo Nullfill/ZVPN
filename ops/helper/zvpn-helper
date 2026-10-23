@@ -54,6 +54,9 @@ validate_identity() {
 }
 
 case "$ACTION" in
+  sync-ike-relay)
+    exec /usr/local/libexec/zvpn/ike-relay.py
+    ;;
   sync-warp)
     exec /usr/local/libexec/zvpn/warp-router.py sync
     ;;

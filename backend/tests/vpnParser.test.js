@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 
 import { parseSas } from '../src/services/saParser.js';
 
+test('compact VICI returns the IKE ID rather than the nested CHILD ID', () => {
+  const session = parseSas('list-sa event {ikev2-vpn {uniqueid=41 remote-id=alice established=15 child-sas {child {name=child uniqueid=99 bytes-in=5 bytes-out=7}}}}')[0];
+  assert.equal(session.ikeId, '41');
+  assert.equal(session.bytesTotal, 12);
+});
+
 test('parseSas accepts spaced strongSwan raw output and sums CHILD_SA bytes', () => {
   const raw = `list-sa event {
     ikev2-vpn-1 {

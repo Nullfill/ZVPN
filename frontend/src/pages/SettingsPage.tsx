@@ -7,6 +7,7 @@ import { useToast } from '../components/Toast';
 import VpnEndpointWizard from '../components/VpnEndpointWizard';
 import WarpSettings from '../components/WarpSettings';
 import NetlifySettings from '../components/NetlifySettings';
+import IkeRelaySettings from '../components/IkeRelaySettings';
 
 interface PanelSettings {
   general: { panelName: string; timezone: string; domain: string };
@@ -40,7 +41,7 @@ export default function SettingsPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeTab, setActiveTab] = useState<'general' | 'endpoint' | 'vpn' | 'backup' | 'security' | 'warp' | 'netlify'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'endpoint' | 'vpn' | 'backup' | 'security' | 'warp' | 'netlify' | 'ikeRelay'>('general');
 
   // Form states
   const [generalForm, setGeneralForm] = useState({ panelName: '', timezone: '', domain: '' });
@@ -307,6 +308,7 @@ export default function SettingsPage() {
 
       {/* Tabs Navigation */}
       <div className="flex flex-wrap gap-2 border-b border-[var(--line)] pb-3">
+        {['admin', 'owner'].includes(meData?.user.role || '') && <button className={`nav-item ${activeTab === 'ikeRelay' ? 'active font-bold' : ''}`} onClick={() => setActiveTab('ikeRelay')}><Server size={18} /> مسیر ایران IKEv2</button>}
         {['admin', 'owner'].includes(meData?.user.role || '') && <button className={`nav-item ${activeTab === 'netlify' ? 'active font-bold' : ''}`} onClick={() => setActiveTab('netlify')}><Server size={18} /> واسط Netlify</button>}
         {['admin', 'owner'].includes(meData?.user.role || '') && <button className={`nav-item ${activeTab === 'warp' ? 'active font-bold' : ''}`} onClick={() => setActiveTab('warp')}><Shield size={18} /> مسیر WARP</button>}
         <button
@@ -344,6 +346,7 @@ export default function SettingsPage() {
       {/* Tab Contents */}
       {activeTab === 'warp' && <WarpSettings />}
       {activeTab === 'netlify' && <NetlifySettings />}
+      {activeTab === 'ikeRelay' && <IkeRelaySettings />}
       {activeTab === 'general' && (
         <GlassCard className="max-w-2xl space-y-4">
           <h3 className="text-lg font-bold">تنظیمات عمومی پنل</h3>

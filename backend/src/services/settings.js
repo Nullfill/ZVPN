@@ -4,6 +4,7 @@ import { invalidateVpnConfigCache } from './vpnConfig.js';
 import { z } from 'zod';
 import { WARP_DEFAULTS } from './warpDefaults.js';
 import { NETLIFY_DEFAULTS, validRelayHostname } from './netlifyConfig.js';
+import { IKE_RELAY_DEFAULTS, ikeRelaySchema } from './ikeRelayConfig.js';
 
 const DEFAULTS = {
   general: { panelName: config.panelName, timezone: config.timezone, domain: '' },
@@ -17,6 +18,7 @@ const DEFAULTS = {
   download: { tokenDays: 30, pageTitle: '', supportText: '' },
   xray: { enabled: true },
   netlify: NETLIFY_DEFAULTS,
+  ikeRelay: IKE_RELAY_DEFAULTS,
   warp: WARP_DEFAULTS,
   telegram: {
     enabled: false,
@@ -42,6 +44,7 @@ const DEFAULTS = {
 };
 
 const SETTINGS_SCHEMAS = {
+  ikeRelay: ikeRelaySchema,
   netlify: z.object({
     enabled: z.boolean().optional(),
     hostname: z.string().trim().toLowerCase().refine(value => value === '' || validRelayHostname(value), 'Enter a hostname without https or a path').optional(),

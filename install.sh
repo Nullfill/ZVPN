@@ -34,6 +34,9 @@ DETECTED_IP="$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || hostnam
 DOMAIN="${ZVPN_DOMAIN:-}"
 ADMIN_USER="${ZVPN_ADMIN_USER:-admin}"
 ADMIN_PASS="${ZVPN_ADMIN_PASSWORD:-}"
+IKE_RELAY_HOSTNAME="${ZVPN_IKE_RELAY_HOSTNAME:-}"
+IKE_RELAY_PORT="${ZVPN_IKE_RELAY_PORT:-14450}"
+IKE_RELAY_OUTBOUND="${ZVPN_IKE_RELAY_OUTBOUND:-direct}"
 
 if [[ -t 0 && -z "${ZVPN_NON_INTERACTIVE:-}" ]]; then
   echo -e "${C}Please provide basic setup details (press Enter to keep defaults):${N}\n"
@@ -47,6 +50,14 @@ if [[ -t 0 && -z "${ZVPN_NON_INTERACTIVE:-}" ]]; then
   read -r -s -p "Enter Admin Password [Leave blank for auto-generated]: " input_pass
   echo
   ADMIN_PASS="${input_pass:-}"
+  read -r -p "Configure the optional Iran IKE relay after installation? [y/N]: " input_relay
+  if [[ "$input_relay" =~ ^[yY]$ ]]; then
+    read -r -p "Iran relay DNS hostname: " IKE_RELAY_HOSTNAME
+    read -r -p "Iran relay UDP port [14450]: " input_relay_port
+    IKE_RELAY_PORT="${input_relay_port:-14450}"
+    read -r -p "Existing Iran Xray outbound tag [direct]: " input_relay_outbound
+    IKE_RELAY_OUTBOUND="${input_relay_outbound:-direct}"
+  fi
 fi
 
 DOMAIN="${DOMAIN:-$DETECTED_IP}"
@@ -369,6 +380,12 @@ sleep 2
 
 # 18. Health Check & Completion Banner
 (cd "$APP/backend" && node scripts/netlify-status.js) || warn "Check Netlify settings in the admin panel"
+if [[ -n "$IKE_RELAY_HOSTNAME" ]]; then
+  (cd "$APP/backend" && runuser -u zvpn -- env ZVPN_IKE_RELAY_HOSTNAME="$IKE_RELAY_HOSTNAME" \
+    ZVPN_IKE_RELAY_PORT="$IKE_RELAY_PORT" ZVPN_IKE_RELAY_OUTBOUND="$IKE_RELAY_OUTBOUND" \
+    node scripts/configure-ike-relay.js) || warn 'Iran relay was not enabled. Complete setup later from panel Settings.'
+fi
+echo 'Optional Iran IKE relay: enable/disable and generate the Iran configuration from panel Settings.'
 echo
 if [[ -f "$APP/doctor.sh" ]]; then
   bash "$APP/doctor.sh" || true

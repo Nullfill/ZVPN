@@ -135,7 +135,7 @@ export default function UserDetailPage() {
         </GlassCard>
       </div>
 
-      <TrafficBreakdown total={u.usageTotal} ike={u.ikeUsageBytes||0} direct={u.xrayDirectUsageBytes||0} netlify={u.netlifyUsageBytes||0} legacy={u.xrayLegacyUsageBytes||0} />
+      <TrafficBreakdown iran={u.ikeRelayUsageBytes||0} total={u.usageTotal} ike={u.ikeUsageBytes||0} direct={u.xrayDirectUsageBytes||0} netlify={u.netlifyUsageBytes||0} legacy={u.xrayLegacyUsageBytes||0} />
       <GlassCard>
         <h3 className="mb-4 font-bold">مصرف ۳۰ روز</h3>
         <div className="h-48">

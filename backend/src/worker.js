@@ -1,4 +1,4 @@
-import { recordDailyActivity } from './services/dailyActivity.js';
+import { recordIkeSession } from './services/ikeUsage.js';
 import { db, many, one, tx } from './db.js';
 import { config } from './config.js';
 import { rawSas, parseSas, disconnectIkeId } from './vpn.js';
@@ -8,9 +8,11 @@ import { SessionReconciler } from './services/sessionReconciler.js';
 import { recordEvent } from './services/observability.js';
 import { checkAndDispatchTelegramBackup } from './services/telegramBackup.js';
 import { collectXrayUsage, stopXray } from './services/xray.js';
+import { syncIkeRelay } from './services/ikeRelay.js';
 
 let running = false;
 let lastSessions = [];
+let lastRelayCheck = 0;
 const sessionReconciler = new SessionReconciler({
   graceMs: config.sessionGraceMs,
   retryMs: config.sessionTerminateRetryMs,
@@ -55,29 +57,7 @@ async function recordSession(session) {
   const today = localDate();
   const hour = hourTs();
   await tx(async (client) => {
-    await recordDailyActivity(client, user.id, today);
-    const snap = await client.query('SELECT last_bytes, last_bytes_in, last_bytes_out FROM sa_snapshots WHERE ike_id=$1 FOR UPDATE', [session.ikeId]);
-    const prev = snap.rows[0];
-    const prevTotal = prev?.last_bytes;
-    const prevIn = Number(prev?.last_bytes_in || 0);
-    const prevOut = Number(prev?.last_bytes_out || 0);
-    const deltaTotal = prevTotal == null
-      ? (session.established <= Math.ceil(config.pollMs / 1000) * 2 ? session.bytesTotal : 0)
-      : (session.bytesTotal >= Number(prevTotal) ? session.bytesTotal - Number(prevTotal) : session.bytesTotal);
-    const deltaIn = session.bytesIn >= prevIn ? session.bytesIn - prevIn : session.bytesIn;
-    const deltaOut = session.bytesOut >= prevOut ? session.bytesOut - prevOut : session.bytesOut;
-    await client.query(
-      `INSERT INTO sa_snapshots(ike_id,user_id,last_bytes,last_bytes_in,last_bytes_out,last_seen_at)
-       VALUES($1,$2,$3,$4,$5,now()) ON CONFLICT(ike_id) DO UPDATE SET last_bytes=EXCLUDED.last_bytes,
-       last_bytes_in=EXCLUDED.last_bytes_in, last_bytes_out=EXCLUDED.last_bytes_out, last_seen_at=now()`,
-      [session.ikeId, user.id, session.bytesTotal, session.bytesIn, session.bytesOut]
-    );
-    if (deltaTotal > 0) {
-      await client.query('UPDATE vpn_users SET usage_total=usage_total+$1, download_bytes=download_bytes+$2, upload_bytes=upload_bytes+$3, updated_at=now() WHERE id=$4', [deltaTotal, deltaIn, deltaOut, user.id]);
-      await client.query(`INSERT INTO usage_daily(user_id,usage_date,bytes) VALUES($1,$2,$3) ON CONFLICT(user_id,usage_date) DO UPDATE SET bytes=usage_daily.bytes+EXCLUDED.bytes`, [user.id, today, deltaTotal]);
-      await client.query(`INSERT INTO usage_hourly(user_id,hour_ts,bytes) VALUES($1,$2,$3) ON CONFLICT(user_id,hour_ts) DO UPDATE SET bytes=usage_hourly.bytes+EXCLUDED.bytes`, [user.id, hour, deltaTotal]);
-    }
-    await client.query(`UPDATE vpn_users SET last_seen_at=now(), last_public_ip=$1::inet, last_virtual_ip=CASE WHEN $2='' THEN last_virtual_ip ELSE $2::inet END WHERE id=$3`, [session.remoteHost || null, session.virtualIp || '', user.id]);
+    await recordIkeSession(client, user, session, today, hour, config.pollMs);
   });
 }
 
@@ -160,6 +140,10 @@ async function tick() {
   if (running) return;
   running = true;
   try {
+    if (Date.now() - lastRelayCheck > 3600000) {
+      lastRelayCheck = Date.now();
+      await syncIkeRelay().catch(error => console.error('[ike-relay sync]', error.message));
+    }
     try { await collectXrayUsage(); } catch (error) {
       console.error('[xray usage]', error.message);
       await stopXray().catch((e) => console.error('[xray stop]', e.message));

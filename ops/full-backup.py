@@ -44,6 +44,11 @@ def collect(destination):
     for file in required:
         if not file.is_file() or not os.access(file, os.R_OK):
             raise RuntimeError('Incomplete backup: required file unavailable: ' + str(file))
+    relay = Path('/etc/zvpn/ike-relay.json')
+    if relay.is_file() and json.loads(relay.read_text()).get('enabled'):
+        for file in (Path('/etc/ipsec.d/zvpn-ike-relay.conf'), Path('/etc/ipsec.d/certs/zvpn-ike-relay-cert.pem')):
+            if not file.is_file():
+                raise RuntimeError('Incomplete backup: relay certificate/configuration missing')
     sources = {
         'panel.env': env,
         'ipsec.conf': Path('/etc/ipsec.conf'), 'ipsec.secrets': Path('/etc/ipsec.secrets'),

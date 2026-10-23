@@ -34,6 +34,11 @@ def verify_snapshot(root):
                  'ipsec.d/cacerts/ikev2-ca-cert.pem','ipsec.d/private/ikev2-ca-key.pem',
                  'ipsec.d/certs/ikev2-server-cert.pem','ipsec.d/private/ikev2-server-key.pem'):
         if name not in manifest['checksums']: raise ValueError('Incomplete full backup: '+name)
+    relay=root/'warp-policy/ike-relay.json'
+    if relay.is_file() and json.loads(relay.read_text()).get('enabled'):
+        for name in ('ipsec.d/zvpn-ike-relay.conf','ipsec.d/certs/zvpn-ike-relay-cert.pem'):
+            if name not in manifest['checksums']:
+                raise ValueError('Incomplete relay backup: '+name)
     return manifest
 
 def decrypt_backup(data,password):
@@ -117,6 +122,9 @@ def restore(root):
                              ('runtime','/opt/zvpn-panel/runtime'),('systemd','/etc/systemd/system')]:
         copy_tree(root/name,destination)
     copy_tree(root/'legacy-public','/opt/zvpn-panel/backend/public')
+    # Relay state is independent of whether WARP was installed on the source.
+    if (root/'warp-policy/ike-relay.json').is_file():
+        copy_tree(root/'warp-policy/ike-relay.json','/etc/zvpn/ike-relay.json')
     # Optional WARP state is present only on servers where it was installed.
     # Copy before install-xray so its conditional installer recreates the proxy.
     # Never restore captured firewall rules or process counter cursors as live rules.

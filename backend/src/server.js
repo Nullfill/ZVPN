@@ -18,7 +18,8 @@ import {
   revokeAdminSession, revokeAllAdminSessions,
 } from './auth.js';
 import { randomPassword } from './crypto.js';
-import { androidProfile, iosProfile, windowsProfile, windowsLauncher, downloadPageHtml, jsonProfile } from './profiles.js';
+import { androidProfile, androidRelayProfile, iosProfile, windowsProfile, windowsLauncher, downloadPageHtml, jsonProfile } from './profiles.js';
+import { applyIkeRelay, getIkeRelayStatus, getIkeRelayTemplate } from './services/ikeRelay.js';
 import { audit } from './audit.js';
 import { recordEvent } from './services/observability.js';
 import { getLiveSessions, startWorker, disconnectUser } from './worker.js';
@@ -108,6 +109,7 @@ app.get('/api/dashboard', requireAdmin, asyncHandler(async (req, res) => {
       COALESCE(sum(usage_total),0)::bigint AS bytes,
       COALESCE(sum(xray_usage_bytes),0)::bigint AS xray_bytes,
       COALESCE(sum(netlify_usage_bytes),0)::bigint AS netlify_bytes,
+      COALESCE(sum(ike_relay_usage_bytes),0)::bigint AS ike_relay_bytes,
       COALESCE(sum(xray_legacy_usage_bytes),0)::bigint AS legacy_bytes FROM vpn_users`),
     one(`SELECT COALESCE(sum(bytes),0)::bigint AS bytes FROM usage_daily WHERE usage_date=(now() AT TIME ZONE $1)::date`, [config.timezone]),
     one(`SELECT COALESCE(sum(bytes),0)::bigint AS bytes FROM usage_daily WHERE usage_date >= date_trunc('month', now() AT TIME ZONE $1)::date`, [config.timezone]),
@@ -124,7 +126,8 @@ app.get('/api/dashboard', requireAdmin, asyncHandler(async (req, res) => {
     totals: { ...totals, bytes: Number(totals.bytes), xrayBytes: Number(totals.xray_bytes),
       netlifyBytes: Number(totals.netlify_bytes), legacyBytes: Number(totals.legacy_bytes),
       directBytes: Math.max(0, Number(totals.xray_bytes) - Number(totals.netlify_bytes) - Number(totals.legacy_bytes)),
-      ikeBytes: Math.max(0, Number(totals.bytes) - Number(totals.xray_bytes)), todayBytes: Number(today.bytes), monthBytes: Number(month.bytes), online: sessions.length },
+      ikeRelayBytes: Number(totals.ike_relay_bytes),
+      ikeBytes: Math.max(0, Number(totals.bytes) - Number(totals.xray_bytes) - Number(totals.ike_relay_bytes)), todayBytes: Number(today.bytes), monthBytes: Number(month.bytes), online: sessions.length },
     system: { load: os.loadavg()[0], memoryUsed: os.totalmem() - os.freemem(), memoryTotal: os.totalmem(), uptime: os.uptime(), disk, strongswan, cpuCount: os.cpus().length },
     recent: await many('SELECT username, last_seen_at, usage_total, created_at FROM vpn_users ORDER BY created_at DESC LIMIT 5'),
     sessions, sync: syncStatus(), xray: await getXrayStatus(),
@@ -308,6 +311,8 @@ app.get('/api/audit', requireAdmin, asyncHandler(async (_req, res) => {
 }));
 
 app.get('/api/settings', requireAdmin, asyncHandler(async (_req, res) => res.json({ settings: await getSettings() })));
+app.get('/api/ike-relay/status', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json(await getIkeRelayStatus())));
+app.get('/api/ike-relay/template', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json(await getIkeRelayTemplate())));
 app.get('/api/warp/status', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json(await getWarpStatus())));
 app.get('/api/warp/presets', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json({ geminiDomains: GEMINI_DOMAINS, antigravityDomains: ANTIGRAVITY_DOMAINS })));
 app.get('/api/warp/users', requireAdmin, adminOnly, asyncHandler(async (_req, res) =>
@@ -329,7 +334,11 @@ app.patch('/api/settings/:section', requireAdmin, adminOnly, asyncHandler(async 
   if (section === 'vpn' && (Object.hasOwn(req.body, 'serverAddress') || Object.hasOwn(req.body, 'remoteId'))) {
     return apiError(res, 400, 'ENDPOINT_USE_WIZARD');
   }
-  const updated = await updateSettings(section, parsed.data);
+  let updated;
+  if (section === 'ikeRelay') {
+    try { updated = await applyIkeRelay(parsed.data); }
+    catch (error) { return res.status(400).json({ error: error.message }); }
+  } else updated = await updateSettings(section, parsed.data);
   if (section === 'xray' || section === 'warp') await syncSecretsNow(60000);
   await audit(req.admin.id, 'settings.update', 'settings', section, parsed.data, clientIp(req));
   res.json({ settings: updated });
@@ -451,6 +460,14 @@ app.get('/d/:token/json', asyncHandler(async (req, res) => {
   res.json(await jsonProfile(u));
 }));
 
+app.get('/d/:token/iran.sswan', asyncHandler(async (req, res) => {
+  const u = await tokenUser(req.params.token);
+  if (!u) return res.status(404).send('Expired');
+  if (!(await getIkeRelayStatus()).ready) return res.status(404).send('Relay unavailable');
+  res.set({ 'Cache-Control': 'no-store', 'Content-Type': 'application/vnd.strongswan.profile',
+    'Content-Disposition': `attachment; filename="${u.username}-iran.sswan"` });
+  res.send(await androidRelayProfile(u));
+}));
 app.get(['/d/:token/android', '/d/:token/android.sswan'], asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Cache-Control': 'no-store', 'Content-Type': 'application/vnd.strongswan.profile', 'Content-Disposition': `attachment; filename="${u.username}.sswan"` }); res.send(await androidProfile(u)); }));
 app.get(['/d/:token/ios', '/d/:token/ios.mobileconfig'], asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Cache-Control': 'no-store', 'Content-Type': 'application/x-apple-aspen-config', 'Content-Disposition': `attachment; filename="${u.username}.mobileconfig"` }); res.send(await iosProfile(u)); }));
 app.get('/d/:token/windows', asyncHandler(async (req, res) => { const u = await tokenUser(req.params.token); if (!u) return res.status(404).send('Expired'); res.set({ 'Content-Disposition': `attachment; filename="${u.username}-windows-setup.ps1"` }); res.send(await windowsProfile(u)); }));

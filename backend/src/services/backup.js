@@ -2,7 +2,7 @@ import { db, many, one, tx } from '../db.js';
 import { createHash } from 'node:crypto';
 import { config } from '../config.js';
 import { encryptSecret, decryptSecret } from '../crypto.js';
-import { getSettings, validateSettingsPatch } from './settings.js';
+import { getSettings, validateSettingsPatch, SETTINGS_SECTIONS } from './settings.js';
 import { queueSyncSecrets, syncSecretsNow } from './syncQueue.js';
 import { invalidateVpnConfigCache } from './vpnConfig.js';
 
@@ -106,7 +106,7 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
   }
   if (data.settings && typeof data.settings === 'object') {
     for (const [key, value] of Object.entries(data.settings)) {
-      if (['general', 'vpn', 'appearance', 'download', 'telegram', 'github', 'xray', 'warp'].includes(key)) {
+      if (SETTINGS_SECTIONS.includes(key)) {
         const parsed = validateSettingsPatch(key, value);
         if (!parsed.success) throw new Error('INVALID_BACKUP_SETTINGS');
       }
@@ -132,7 +132,7 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
   await tx(async (client) => {
     if (data.settings && mode !== 'users-only') {
       for (const [key, value] of Object.entries(data.settings)) {
-        if (!value || typeof value !== 'object' || !['general', 'vpn', 'appearance', 'download', 'telegram', 'github', 'xray', 'warp'].includes(key)) continue;
+        if (!value || typeof value !== 'object' || !SETTINGS_SECTIONS.includes(key)) continue;
         await client.query(
           `INSERT INTO panel_settings(key, value, updated_at) VALUES($1, $2::jsonb, now())
            ON CONFLICT(key) DO UPDATE SET value=$2::jsonb, updated_at=now()`,
@@ -224,17 +224,17 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
         if (u.xray_uuid && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u.xray_uuid)) {
           throw new Error('INVALID_XRAY_UUID');
         }
-        await client.query('UPDATE vpn_users SET xray_uuid=COALESCE($1::uuid,xray_uuid),xray_usage_bytes=$2, netlify_usage_bytes=$4, xray_legacy_usage_bytes=$5 WHERE username=$3',
-          [u.xray_uuid || null, u.xray_usage_bytes || 0, u.username, u.netlify_usage_bytes || 0, u.xray_legacy_usage_bytes ?? Math.max(0, Number(u.xray_usage_bytes || 0) - Number(u.netlify_usage_bytes || 0))]);
+        await client.query('UPDATE vpn_users SET xray_uuid=COALESCE($1::uuid,xray_uuid),xray_usage_bytes=$2, netlify_usage_bytes=$4, xray_legacy_usage_bytes=$5, ike_relay_usage_bytes=$6 WHERE username=$3',
+          [u.xray_uuid || null, u.xray_usage_bytes || 0, u.username, u.netlify_usage_bytes || 0, u.xray_legacy_usage_bytes ?? Math.max(0, Number(u.xray_usage_bytes || 0) - Number(u.netlify_usage_bytes || 0)), u.ike_relay_usage_bytes || 0]);
       }
     }
 
     if (Array.isArray(data.usageDaily)) {
       for (const row of data.usageDaily) {
         await client.query(
-          `INSERT INTO usage_daily(user_id, usage_date, bytes) VALUES($1,$2,$3)
-           ON CONFLICT(user_id, usage_date) DO UPDATE SET bytes=EXCLUDED.bytes`,
-          [row.user_id, row.usage_date, row.bytes ?? 0]
+          `INSERT INTO usage_daily(user_id, usage_date, bytes, ike_relay_bytes) VALUES($1,$2,$3,$4)
+           ON CONFLICT(user_id, usage_date) DO UPDATE SET bytes=EXCLUDED.bytes,ike_relay_bytes=EXCLUDED.ike_relay_bytes`,
+          [row.user_id, row.usage_date, row.bytes ?? 0, row.ike_relay_bytes ?? 0]
         );
       }
     }
@@ -242,9 +242,9 @@ export async function importPanelBackup(data, { mode = 'merge' } = {}) {
     if (Array.isArray(data.usageHourly)) {
       for (const row of data.usageHourly) {
         await client.query(
-          `INSERT INTO usage_hourly(user_id, hour_ts, bytes) VALUES($1,$2,$3)
-           ON CONFLICT(user_id, hour_ts) DO UPDATE SET bytes=EXCLUDED.bytes`,
-          [row.user_id, row.hour_ts, row.bytes ?? 0]
+          `INSERT INTO usage_hourly(user_id, hour_ts, bytes, ike_relay_bytes) VALUES($1,$2,$3,$4)
+           ON CONFLICT(user_id, hour_ts) DO UPDATE SET bytes=EXCLUDED.bytes,ike_relay_bytes=EXCLUDED.ike_relay_bytes`,
+          [row.user_id, row.hour_ts, row.bytes ?? 0, row.ike_relay_bytes ?? 0]
         );
       }
     }

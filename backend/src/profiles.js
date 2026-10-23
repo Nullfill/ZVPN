@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { decryptSecret } from './crypto.js';
 import { getVpnProfileConfig } from './services/vpnConfig.js';
 import { renderUserPortal } from './services/userPortal.js';
+import { getIkeRelayStatus } from './services/ikeRelay.js';
 
 let caCache = null;
 async function caInfo() {
@@ -29,6 +30,18 @@ export async function androidProfile(user) {
     local: { eap_id: user.username, id: user.username, shared_secret: decryptSecret(user.secret_enc) },
     'split-tunneling': { 'block-ipv4': true, 'block-ipv6': true },
   };
+  return JSON.stringify(profile, null, 2);
+}
+
+export async function androidRelayProfile(user) {
+  const relay = await getIkeRelayStatus();
+  if (!relay.ready) throw new Error('IKE_RELAY_NOT_READY');
+  const profile = JSON.parse(await androidProfile(user));
+  profile.name = `${config.panelName} - Iran - ${user.username}`;
+  profile.remote.addr = relay.hostname;
+  profile.remote.id = relay.hostname;
+  profile.remote.port = relay.port;
+  profile.mtu = 1380;
   return JSON.stringify(profile, null, 2);
 }
 
@@ -246,6 +259,7 @@ export async function jsonProfile(user) {
 }
 
 export async function downloadPageHtml(user, links, settings) {
+  if (settings?.ikeRelay?.enabled) settings = { ...settings, ikeRelay: await getIkeRelayStatus() };
   return renderUserPortal(user, links, settings, {
     vpn: await getVpnProfileConfig(), baseUrl: config.publicBaseUrl,
     panelName: config.panelName,

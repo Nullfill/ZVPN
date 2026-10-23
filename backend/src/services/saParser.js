@@ -1,3 +1,5 @@
+import { relayTransport } from './ikeRelayConfig.js';
+
 function sumMatches(text, regex) {
   let total = 0;
   for (const match of text.matchAll(regex)) total += Number(match[1] || 0);
@@ -8,7 +10,7 @@ function rawValue(block, key) {
   // `swanctl --raw` output has used both key=value and key = value forms
   // across supported strongSwan releases. IDs may also be quoted.
   const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = block.match(new RegExp(`(?:^|\\s)${escaped}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s}]+))`, 'm'));
+  const match = block.match(new RegExp(`(?:^|[\\s{])${escaped}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s}]+))`, 'm'));
   return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
 }
 
@@ -30,7 +32,9 @@ export function parseSas(raw) {
       const bytesOut = sumMatches(block, /\bbytes-out\s*=\s*(\d+)/g);
       const eapId = rawValue(block, 'remote-eap-id');
       const remoteId = rawValue(block, 'remote-id');
+      const connection = /^list-sa\s+event\s*\{\s*([^\s{]+)\s*\{/.exec(block)?.[1];
       return {
+        ...(relayTransport(connection) === 'ike-relay' ? { transport: 'ike-relay' } : {}),
         ikeId: rawValue(block, 'uniqueid'),
         remoteId: eapId || remoteId,
         remoteHost: rawValue(block, 'remote-host'),

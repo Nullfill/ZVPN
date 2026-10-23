@@ -1,6 +1,7 @@
 import { syncSecrets as doSync } from '../vpn.js';
 import { syncXray, stopXray, xrayAvailable } from './xray.js';
 import { db } from '../db.js';
+import { syncIkeRelay } from './ikeRelay.js';
 
 let pending = false;
 let running = false;
@@ -19,6 +20,8 @@ function enqueueSync() {
     running = true;
     try {
       await doSync();
+      // Optional relay failures must never stop the primary IKE/Xray service.
+      await syncIkeRelay().catch(error => console.error('[ike-relay sync]', error.message));
       await syncXray();
       await db.query(`UPDATE vpn_users SET provisioning_status='active', provisioning_error=NULL WHERE provisioning_status IN ('provisioning','failed')`);
       lastError = null;
