@@ -9,6 +9,7 @@ import re
 import stat
 import subprocess
 import tempfile
+import time
 
 RUNTIME = Path('/opt/zvpn-panel/runtime')
 MAIN = Path('/etc/ipsec.conf')
@@ -137,8 +138,15 @@ def apply(policy):
             write(MAIN, text, before[MAIN][1])
         run(['ipsec', 'update'])
         run(['ipsec', 'rereadall'])
-        if policy['enabled'] and 'zvpn-ike-relay:' not in run(['ipsec', 'statusall']):
-            raise ValueError('Relay connection was not loaded')
+        if policy['enabled']:
+            # starter processes update asynchronously; allow the new identity
+            # to appear before considering a fresh installation unsuccessful.
+            for attempt in range(11):
+                if 'zvpn-ike-relay:' in run(['ipsec', 'statusall']):
+                    break
+                if attempt == 10:
+                    raise ValueError('Relay connection was not loaded')
+                time.sleep(0.5)
         if not policy['enabled']:
             # Only this identity is terminated; native users stay connected.
             subprocess.run(['ipsec', 'down', 'zvpn-ike-relay'], capture_output=True, timeout=15)

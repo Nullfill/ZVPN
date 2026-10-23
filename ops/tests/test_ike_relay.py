@@ -31,13 +31,19 @@ class RelayTests(unittest.TestCase):
             paths['CERT'].write_bytes(b'unchanged relay certificate')
             policy = dict(enabled=True, hostname='ir.example.com', port=14450, outboundTag='tunnel-1')
             calls = []
+            status_calls = 0
             def run(args):
+                nonlocal status_calls
                 calls.append(args)
                 if args[:2] == ['ipsec', 'statusall']:
+                    status_calls += 1
+                    if status_calls == 1:
+                        return 'starter is still applying update'
                     return 'zvpn-ike-relay: loaded'
                 return 'certificate valid'
-            with patch.multiple(relay, **paths), patch.object(relay, 'certificate_matches', return_value=True), patch.object(relay, 'run', side_effect=run):
+            with patch.multiple(relay, **paths), patch.object(relay, 'certificate_matches', return_value=True), patch.object(relay, 'run', side_effect=run), patch.object(relay.time, 'sleep') as sleep:
                 relay.apply(policy)
+                sleep.assert_called_once_with(0.5)
                 self.assertIn(main, paths['MAIN'].read_bytes())
                 self.assertEqual(paths['CERT'].read_bytes(), b'unchanged relay certificate')
                 self.assertIn('also=ikev2-vpn', paths['CONNECTION'].read_text())
