@@ -60,6 +60,17 @@ def write(file, data, mode=0o600):
     file.parent.mkdir(parents=True, exist_ok=True)
     if file.is_symlink():
         raise ValueError('Refusing managed symlink')
+    if file == MAIN and file.exists():
+        # systemd exposes this individual file through ReadWritePaths. Replacing
+        # its inode invalidates that writable exception for the running panel.
+        # Keep the inode, as normalize-conn does; apply() retains rollback bytes.
+        with file.open('r+b') as stream:
+            os.fchmod(stream.fileno(), mode)
+            stream.write(data if isinstance(data, bytes) else data.encode())
+            stream.truncate()
+            stream.flush()
+            os.fsync(stream.fileno())
+        return
     fd, temporary = tempfile.mkstemp(prefix='.ike-relay-', dir=file.parent)
     try:
         os.fchmod(fd, mode)

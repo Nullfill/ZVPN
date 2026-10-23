@@ -28,6 +28,7 @@ class RelayTests(unittest.TestCase):
             paths['RUNTIME'].mkdir()
             main = b'config setup\nconn ikev2-vpn\n    leftcert=production.pem\n'
             paths['MAIN'].write_bytes(main)
+            main_inode = paths['MAIN'].stat().st_ino
             paths['CERT'].write_bytes(b'unchanged relay certificate')
             policy = dict(enabled=True, hostname='ir.example.com', port=14450, outboundTag='tunnel-1')
             calls = []
@@ -45,6 +46,7 @@ class RelayTests(unittest.TestCase):
                 relay.apply(policy)
                 sleep.assert_called_once_with(0.5)
                 self.assertIn(main, paths['MAIN'].read_bytes())
+                self.assertEqual(paths['MAIN'].stat().st_ino, main_inode)
                 self.assertEqual(paths['CERT'].read_bytes(), b'unchanged relay certificate')
                 self.assertIn('also=ikev2-vpn', paths['CONNECTION'].read_text())
                 self.assertTrue(json.loads((paths['RUNTIME']/'ike-relay-status.json').read_text())['ready'])
@@ -61,6 +63,16 @@ class RelayTests(unittest.TestCase):
                         relay.apply({**policy, 'hostname': 'new.example.com'})
                 self.assertEqual(paths['CONNECTION'].read_bytes(), previous)
                 self.assertEqual(paths['CERT'].read_bytes(), b'unchanged relay certificate')
+
+    def test_main_file_update_does_not_rename_systemd_bind_mount(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory) / 'ipsec.conf'
+            file.write_text('long original configuration')
+            inode = file.stat().st_ino
+            with patch.object(relay, 'MAIN', file), patch.object(relay.os, 'replace', side_effect=OSError('mount point busy')):
+                relay.write(file, 'new')
+            self.assertEqual(file.read_text(), 'new')
+            self.assertEqual(file.stat().st_ino, inode)
 
 
 if __name__ == '__main__':
