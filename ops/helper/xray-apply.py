@@ -11,9 +11,14 @@ def validate(data):
     assert data['policy'] == {'levels': {'0': {'statsUserUplink': True, 'statsUserDownlink': True}}}
     assert data['outbounds'] == [{'tag':'direct','protocol':'freedom'}]
     assert data['routing'] == {'rules':[{'type':'field','inboundTag':['api-in'],'outboundTag':'api'}]}
-    api,direct,relay=data['inbounds']
+    assert len(data['inbounds']) in (3,4)
+    api,direct,relay=data['inbounds'][:3]
     assert api == {'tag':'api-in','listen':'127.0.0.1','port':10086,'protocol':'dokodemo-door','settings':{'address':'127.0.0.1'}}
-    for vless,tag,port,path,prefix in [(direct,'zvpn-vless',10085,'/zvpn-xhttp/','zvpn-'),(relay,'zvpn-netlify',10090,'/zvpn-netlify/','zvpn-netlify-')]:
+    entries=[(direct,'zvpn-vless',10085,'/zvpn-xhttp/','zvpn-'),(relay,'zvpn-netlify',10090,'/zvpn-netlify/','zvpn-netlify-')]
+    if len(data['inbounds']) == 4:
+        iran=data['inbounds'][3]
+        entries.append((iran,'zvpn-iran',10091,'/zvpn-iran/','zvpn-iran-'))
+    for vless,tag,port,path,prefix in entries:
         assert set(vless) == {'tag','listen','port','protocol','settings','streamSettings'}
         assert (vless['tag'],vless['listen'],vless['port'],vless['protocol']) == (tag,'127.0.0.1',port,'vless')
         assert vless['streamSettings'] == {'network':'xhttp','security':'none','xhttpSettings':{'path':path,'mode':'auto'}}
@@ -25,6 +30,8 @@ def validate(data):
             assert fullmatch(prefix+'[0-9a-f-]{36}',user['email']) and user['id'] not in seen
             seen.add(user['id'])
     assert [(u['id'],u['email'].removeprefix('zvpn-')) for u in direct['settings']['clients']] == [(u['id'],u['email'].removeprefix('zvpn-netlify-')) for u in relay['settings']['clients']]
+    if len(data['inbounds']) == 4 and iran['settings']['clients']:
+        assert [(u['id'],u['email'].removeprefix('zvpn-')) for u in direct['settings']['clients']] == [(u['id'],u['email'].removeprefix('zvpn-iran-')) for u in iran['settings']['clients']]
     return data
 
 def test_config(binary, path):

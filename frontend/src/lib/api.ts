@@ -61,6 +61,7 @@ export interface VpnUser {
   usageTotal: number;
   xrayUsageBytes: number;
   netlifyUsageBytes: number;
+  xrayIranUsageBytes: number;
   xrayDirectUsageBytes: number;
   xrayLegacyUsageBytes: number;
   ikeUsageBytes: number;

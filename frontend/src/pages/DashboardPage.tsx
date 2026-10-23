@@ -17,7 +17,7 @@ interface DashboardResponse {
     bytes: number;
     xrayBytes?: number;
     netlifyBytes?: number; directBytes?: number; legacyBytes?: number;
-    ikeBytes?: number; ikeRelayBytes?: number;
+    ikeBytes?: number; ikeRelayBytes?: number; xrayIranBytes?: number;
   };
   system?: {
     load?: number;
@@ -106,7 +106,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      <TrafficBreakdown iran={totals.ikeRelayBytes||0} total={totals.bytes} ike={totals.ikeBytes||0} direct={totals.directBytes||0} netlify={totals.netlifyBytes||0} legacy={totals.legacyBytes||0} />
+      <TrafficBreakdown xrayIran={totals.xrayIranBytes||0} iran={totals.ikeRelayBytes||0} total={totals.bytes} ike={totals.ikeBytes||0} direct={totals.directBytes||0} netlify={totals.netlifyBytes||0} legacy={totals.legacyBytes||0} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard icon={Activity} label="مجموع Xray و Netlify" value={fmtBytes(totals.xrayBytes || 0)} sub="از مجموع سهمیه مشترک کاربران" />
         <StatCard icon={ShieldCheck} label="مصرف IKEv2" value={fmtBytes(totals.ikeBytes || 0)} sub="از مجموع سهمیه مشترک کاربران" />

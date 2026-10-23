@@ -28,6 +28,7 @@ import { runMigrations } from './migrate.js';
 import { syncSecretsNow, syncStatus } from './services/syncQueue.js';
 import { xrayLink } from './services/xrayConfig.js';
 import { netlifyLink } from './services/netlifyConfig.js';
+import { xrayRelayLink, xrayRelayTemplate } from './services/xrayRelayConfig.js';
 import { subscriptionInfo, subscriptionLinks } from './services/subscription.js';
 import { getXrayStatus } from './services/xray.js';
 import { getWarpStatus, reconnectWarp, rotateWarpIp } from './services/warp.js';
@@ -109,6 +110,7 @@ app.get('/api/dashboard', requireAdmin, asyncHandler(async (req, res) => {
       COALESCE(sum(usage_total),0)::bigint AS bytes,
       COALESCE(sum(xray_usage_bytes),0)::bigint AS xray_bytes,
       COALESCE(sum(netlify_usage_bytes),0)::bigint AS netlify_bytes,
+      COALESCE(sum(xray_iran_usage_bytes),0)::bigint AS xray_iran_bytes,
       COALESCE(sum(ike_relay_usage_bytes),0)::bigint AS ike_relay_bytes,
       COALESCE(sum(xray_legacy_usage_bytes),0)::bigint AS legacy_bytes FROM vpn_users`),
     one(`SELECT COALESCE(sum(bytes),0)::bigint AS bytes FROM usage_daily WHERE usage_date=(now() AT TIME ZONE $1)::date`, [config.timezone]),
@@ -124,8 +126,8 @@ app.get('/api/dashboard', requireAdmin, asyncHandler(async (req, res) => {
   const sessions = getLiveSessions();
   res.json({
     totals: { ...totals, bytes: Number(totals.bytes), xrayBytes: Number(totals.xray_bytes),
-      netlifyBytes: Number(totals.netlify_bytes), legacyBytes: Number(totals.legacy_bytes),
-      directBytes: Math.max(0, Number(totals.xray_bytes) - Number(totals.netlify_bytes) - Number(totals.legacy_bytes)),
+      xrayIranBytes: Number(totals.xray_iran_bytes), netlifyBytes: Number(totals.netlify_bytes), legacyBytes: Number(totals.legacy_bytes),
+      directBytes: Math.max(0, Number(totals.xray_bytes) - Number(totals.netlify_bytes) - Number(totals.legacy_bytes) - Number(totals.xray_iran_bytes)),
       ikeRelayBytes: Number(totals.ike_relay_bytes),
       ikeBytes: Math.max(0, Number(totals.bytes) - Number(totals.xray_bytes) - Number(totals.ike_relay_bytes)), todayBytes: Number(today.bytes), monthBytes: Number(month.bytes), online: sessions.length },
     system: { load: os.loadavg()[0], memoryUsed: os.totalmem() - os.freemem(), memoryTotal: os.totalmem(), uptime: os.uptime(), disk, strongswan, cpuCount: os.cpus().length },
@@ -311,6 +313,15 @@ app.get('/api/audit', requireAdmin, asyncHandler(async (_req, res) => {
 }));
 
 app.get('/api/settings', requireAdmin, asyncHandler(async (_req, res) => res.json({ settings: await getSettings() })));
+app.get('/api/xray-relay/status', requireAdmin, adminOnly, asyncHandler(async (_req, res) => {
+  const policy = await getSetting('xrayRelay'), core = await getXrayStatus();
+  res.json({ ...policy, ready: policy.enabled && core.enabled && core.service === 'active', meteringHealthy: core.meteringHealthy });
+}));
+app.get('/api/xray-relay/template', requireAdmin, adminOnly, asyncHandler(async (_req, res) => {
+  const policy = await getSetting('xrayRelay');
+  if (!policy.hostname) return apiError(res, 400, 'RELAY_HOSTNAME_REQUIRED');
+  res.json({ fragment: xrayRelayTemplate(policy, config.publicBaseUrl), origin: new URL(config.publicBaseUrl).hostname });
+}));
 app.get('/api/ike-relay/status', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json(await getIkeRelayStatus())));
 app.get('/api/ike-relay/template', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json(await getIkeRelayTemplate())));
 app.get('/api/warp/status', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json(await getWarpStatus())));
@@ -339,7 +350,7 @@ app.patch('/api/settings/:section', requireAdmin, adminOnly, asyncHandler(async 
     try { updated = await applyIkeRelay(parsed.data); }
     catch (error) { return res.status(400).json({ error: error.message }); }
   } else updated = await updateSettings(section, parsed.data);
-  if (section === 'xray' || section === 'warp') await syncSecretsNow(60000);
+  if (section === 'xray' || section === 'warp' || section === 'xrayRelay') await syncSecretsNow(60000);
   await audit(req.admin.id, 'settings.update', 'settings', section, parsed.data, clientIp(req));
   res.json({ settings: updated });
 }));
@@ -414,24 +425,25 @@ app.use('/d/portal-assets', express.static(fileURLToPath(new URL('../public/port
   index: false, dotfiles: 'deny', maxAge: '30d', immutable: true,
 }));
 
-app.get(['/d/:token/subscription', '/d/:token/xray', '/d/:token/xray-subscription', '/d/:token/netlify', '/d/:token/netlify-subscription'], asyncHandler(async (req, res) => {
+app.get(['/d/:token/subscription', '/d/:token/xray', '/d/:token/xray-subscription', '/d/:token/netlify', '/d/:token/netlify-subscription', '/d/:token/iran-xray', '/d/:token/iran-xray-subscription'], asyncHandler(async (req, res) => {
   const user = await tokenUser(req.params.token);
   if (!user) return res.status(404).send('Invalid link');
   const settings = await getSettings();
   if (settings.xray.enabled === false) return res.status(503).send('Xray is disabled');
   const relayOnly = req.path.endsWith('/netlify') || req.path.endsWith('/netlify-subscription');
-  const link = relayOnly ? netlifyLink(user, config.publicBaseUrl, settings.netlify) : xrayLink(user, config.publicBaseUrl);
-  if (!link) return res.status(503).send('Netlify is disabled');
+  const iranOnly = req.path.endsWith('/iran-xray') || req.path.endsWith('/iran-xray-subscription');
+  const link = iranOnly ? xrayRelayLink(user, config.publicBaseUrl, settings.xrayRelay) : relayOnly ? netlifyLink(user, config.publicBaseUrl, settings.netlify) : xrayLink(user, config.publicBaseUrl);
+  if (!link) return res.status(503).send('Requested relay is disabled');
   res.set('Cache-Control', 'no-store');
   const info = subscriptionInfo(user);
   res.set('subscription-userinfo', info.userinfo);
   res.set('profile-title', `base64:${Buffer.from(`ZVPN ${user.username}`).toString('base64')}`);
   res.set('profile-update-interval', '6');
   if (req.path.endsWith('-subscription') || req.path.endsWith('/subscription')) {
-    const links = relayOnly ? [link, info.row] : subscriptionLinks(user, config.publicBaseUrl, settings);
+    const links = relayOnly || iranOnly ? [link, info.row] : subscriptionLinks(user, config.publicBaseUrl, settings);
     return res.type('text/plain').send(Buffer.from(links.join('\n')+'\n').toString('base64'));
   }
-  res.set('Content-Disposition', `attachment; filename="${relayOnly ? 'zvpn-netlify' : 'zvpn-xray'}.txt"`);
+  res.set('Content-Disposition', `attachment; filename="${iranOnly ? 'zvpn-iran' : relayOnly ? 'zvpn-netlify' : 'zvpn-xray'}.txt"`);
   return res.type('text/plain').send(link+'\n');
 }));
 

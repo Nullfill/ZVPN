@@ -71,7 +71,7 @@ def main_xray(config, policy):
             'servers': [{'address': '127.0.0.1', 'port': 40001}]}},
         {'tag': 'zvpn-warp-quic', 'protocol': 'blackhole'},
     ]
-    user = {} if policy['scope'] == 'all' else {'user': [prefix + u['id'] for u in policy['users'] for prefix in ('zvpn-', 'zvpn-netlify-')]}
+    user = {} if policy['scope'] == 'all' else {'user': [prefix + u['id'] for u in policy['users'] for prefix in ('zvpn-', 'zvpn-netlify-', 'zvpn-iran-')]}
     rules = data['routing']['rules']
     if policy['excludedDomains']:
         rules.append({'type': 'field', **user, 'domain': ['domain:' + d for d in policy['excludedDomains']], 'outboundTag': 'direct'})

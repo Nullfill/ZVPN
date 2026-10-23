@@ -8,20 +8,22 @@ import { useToast } from './Toast';
 type Policy = { enabled: boolean; hostname: string; port: number; outboundTag: string };
 type Template = { inbounds: any[]; outbounds?: any[]; routing: { rules: any[] }; [key: string]: any };
 
-export default function IkeRelaySettings() {
+export default function IkeRelaySettings({ kind = 'ike' }: { kind?: 'ike' | 'xray' }) {
+  const isXray = kind === 'xray';
+  const section = isXray ? 'xrayRelay' : 'ikeRelay', endpoint = isXray ? 'xray-relay' : 'ike-relay';
   const toast = useToast(), qc = useQueryClient();
   const [form, setForm] = useState<Policy | null>(null);
   const [original, setOriginal] = useState(''), [result, setResult] = useState('');
-  const settings = useQuery({ queryKey: ['settings'], queryFn: () => api<{ settings: { ikeRelay: Policy } }>('/api/settings') });
-  const status = useQuery({ queryKey: ['ike-relay-status'], queryFn: () => api<Policy & { ready: boolean }>('/api/ike-relay/status') });
-  useEffect(() => { if (!form && settings.data?.settings.ikeRelay) setForm(settings.data.settings.ikeRelay); }, [form, settings.data]);
+  const settings = useQuery({ queryKey: ['settings'], queryFn: () => api<{ settings: Record<string, Policy> }>('/api/settings') });
+  const status = useQuery({ queryKey: [endpoint, 'status'], queryFn: () => api<Policy & { ready: boolean }>(`/api/${endpoint}/status`) });
+  useEffect(() => { if (!form && settings.data?.settings[section]) setForm(settings.data.settings[section]); }, [form, settings.data, section]);
   const save = useMutation({
-    mutationFn: () => api<{ settings: Policy }>('/api/settings/ikeRelay', { method: 'PATCH', body: JSON.stringify(form) }),
-    onSuccess: response => { setForm(response.settings); setResult(''); toast('تنظیمات مسیر ایران ذخیره شد.', 'success'); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['ike-relay-status'] }); },
+    mutationFn: () => api<{ settings: Policy }>(`/api/settings/${section}`, { method: 'PATCH', body: JSON.stringify(form) }),
+    onSuccess: response => { setForm(response.settings); setResult(''); toast('تنظیمات مسیر ایران ذخیره شد.', 'success'); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: [endpoint, 'status'] }); },
     onError: () => toast('اعمال تنظیمات انجام نشد؛ دامنه و وضعیت سرور را بررسی کنید. اتصال اصلی برقرار می‌ماند.', 'error'),
   });
   const generate = useMutation({
-    mutationFn: () => api<{ fragment: Template }>('/api/ike-relay/template'),
+    mutationFn: () => api<{ fragment: Template }>(`/api/${endpoint}/template`),
     onSuccess: ({ fragment }) => {
       try {
         const input = JSON.parse(original) as Template;
@@ -31,6 +33,7 @@ export default function IkeRelaySettings() {
         const legacy = input.inbounds.find(v => v.tag === `ir-ike-test-${inbound.port}` && v.protocol === 'tunnel'
           && v.settings?.allowedNetwork === 'udp' && v.settings?.rewritePort === 4500);
         if (legacy) owned.add(legacy.tag);
+        if (isXray && input.inbounds.some(v => v.tag === 'zvpn-xray-relay-test' && v.port === inbound.port && v.protocol === 'tunnel' && v.settings?.allowedNetwork === 'tcp')) owned.add('zvpn-xray-relay-test');
         if (!input.outbounds.some(v => v.tag === rule.outboundTag)) return toast('خروجی انتخاب‌شده در تنظیمات پنل ایران وجود ندارد.', 'error');
         if (input.inbounds.some(v => !owned.has(v.tag) && String(v.port) === String(inbound.port))) return toast('این پورت در قالب فعلی استفاده شده است؛ پورت دیگری انتخاب کنید.', 'error');
         input.inbounds = [...input.inbounds.filter(v => !owned.has(v.tag)), inbound];
@@ -47,32 +50,32 @@ export default function IkeRelaySettings() {
     onError: () => toast('تنظیمات آماده نشد؛ دامنه اصلی سرور خارجی باید با دامنه ایران متفاوت باشد.', 'error'),
   });
   if (!form) return <GlassCard>در حال دریافت تنظیمات…</GlassCard>;
-  const dirty = settings.data?.settings.ikeRelay && (['enabled', 'hostname', 'port', 'outboundTag'] as const).some(key => form[key] !== settings.data!.settings.ikeRelay[key]);
+  const dirty = settings.data?.settings[section] && (['enabled', 'hostname', 'port', 'outboundTag'] as const).some(key => form[key] !== settings.data!.settings[section][key]);
   return <div className="space-y-5">
     <GlassCard className="space-y-4">
-      <h3 className="flex items-center gap-2 text-lg font-bold"><Network /> مسیر جایگزین IKEv2 از ایران</h3>
-      <p className="text-sm leading-7 text-muted">کاربر به واسط ایران متصل می‌شود؛ حساب، اعتبار و سهمیه همان حساب اصلی است. مصرف این مسیر از زمان فعال‌سازی جدا نمایش داده می‌شود.</p>
+      <h3 className="flex items-center gap-2 text-lg font-bold"><Network /> {isXray ? 'اتصال Xray از ایران' : 'مسیر جایگزین IKEv2 از ایران'}</h3>
+      <p className="text-sm leading-7 text-muted">{isXray ? 'کانفیگ ایران کنار اتصال مستقیم و Netlify در همان ساب کاربران قرار می‌گیرد؛ مناسب برنامه‌های سازگار با XHTTP در اندروید، آیفون و ویندوز.' : 'کاربر به واسط ایران متصل می‌شود؛ حساب، اعتبار و سهمیه همان حساب اصلی است.'} مصرف این مسیر جدا ثبت می‌شود و از همان سهمیه مشترک کم می‌شود.</p>
       <span className="badge">{!form.enabled ? 'خاموش' : status.data?.ready ? 'سرور خارجی آماده؛ اتصال ایران را آزمایش کنید' : 'نیاز به بررسی تنظیمات'}</span>
       <form className="space-y-4" onSubmit={e => { e.preventDefault(); save.mutate(); }}>
-        <label className="flex gap-3"><input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} /> فعال‌سازی مسیر ایران و نمایش فایل اتصال به کاربران</label>
+        <label className="flex gap-3"><input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} /> {isXray ? 'فعال‌سازی Xray از ایران و افزودن به ساب کاربران' : 'فعال‌سازی مسیر ایران و نمایش فایل اتصال به کاربران'}</label>
         <label className="block space-y-2"><span>دامنه واسط ایران</span><input className="input w-full" dir="ltr" placeholder="ir-vpn.example.com" required={form.enabled} value={form.hostname} onChange={e => setForm({ ...form, hostname: e.target.value.trim().toLowerCase() })} /></label>
         <div className="grid gap-4 md:grid-cols-2">
-          <label className="space-y-2"><span>پورت UDP روی سرور ایران</span><input className="input w-full" dir="ltr" type="number" min="1024" max="65535" value={form.port} onChange={e => setForm({ ...form, port: Number(e.target.value) })} /></label>
+          <label className="space-y-2"><span>پورت {isXray ? 'TCP' : 'UDP'} روی سرور ایران</span><input className="input w-full" dir="ltr" type="number" min="1024" max="65535" value={form.port} onChange={e => setForm({ ...form, port: Number(e.target.value) })} /></label>
           <label className="space-y-2"><span>نام خروجی در پنل ایران</span><input className="input w-full" dir="ltr" value={form.outboundTag} required pattern="[a-zA-Z0-9_.-]+" onChange={e => setForm({ ...form, outboundTag: e.target.value })} /></label>
         </div>
-        <p className="text-sm text-muted leading-7">رکورد A این دامنه باید IP ایران باشد و پروکسی DNS خاموش باشد. ذخیره، گواهی اختصاصی را با CA فعلی می‌سازد؛ گواهی اصلی تغییر نمی‌کند. پورت سفارشی فعلاً برای strongSwan اندروید است؛ اتصال داخلی ویندوز و آیفون را پشتیبانی نمی‌کند.</p>
+        <p className="text-sm text-muted leading-7">رکورد A این دامنه باید IP ایران باشد و پروکسی DNS خاموش باشد. {isXray ? 'از همان گواهی HTTPS سرور خارجی استفاده می‌شود؛ برای این مسیر گواهی تازه روی ایران لازم نیست. برنامه کاربر باید VLESS/XHTTP را پشتیبانی کند. با خاموش‌کردن این مسیر، ساب آن را حذف می‌کند و ورودی اختصاصی خارج هم کاربرانش را نمی‌پذیرد.' : 'ذخیره، گواهی اختصاصی را با CA فعلی می‌سازد؛ گواهی اصلی تغییر نمی‌کند. پورت سفارشی فعلاً برای strongSwan اندروید است؛ اتصال داخلی ویندوز و آیفون را پشتیبانی نمی‌کند.'}</p>
         <button className="btn btn-primary" disabled={save.isPending}><Save size={16} /> {save.isPending ? 'در حال اعمال…' : 'ذخیره و اعمال'}</button>
       </form>
     </GlassCard>
     <GlassCard className="space-y-4">
       <h3 className="font-bold">آماده‌سازی تنظیمات پنل ایران</h3>
-      <ol className="list-decimal list-inside space-y-2 text-sm leading-7"><li>تنظیمات بالا را ذخیره کنید.</li><li>متن کامل Advanced پنل ایران را به‌عنوان بکاپ نگه دارید و در کادر زیر قرار دهید.</li><li>تنظیم جدید را بسازید، در همان Advanced جایگزین و ذخیره کنید. اینباندهای کاربران تغییر نمی‌کنند.</li><li>از صفحه یک کاربر، فایل «اتصال از ایران» را وارد strongSwan و اتصال اینترنت را تست کنید.</li></ol>
-      <p className="text-xs text-muted">ترکیب JSON داخل مرورگر انجام می‌شود؛ متن پنل ایران به سرور ارسال نمی‌شود. برای ارتباط ایران با خارج می‌توانید خروجی تونل موجود را انتخاب کنید. direct فقط وقتی مناسب است که UDP مستقیم واقعاً کار کند.</p>
+      <ol className="list-decimal list-inside space-y-2 text-sm leading-7"><li>تنظیمات بالا را ذخیره کنید.</li><li>متن کامل Advanced پنل ایران را به‌عنوان بکاپ نگه دارید و در کادر زیر قرار دهید.</li><li>تنظیم جدید را بسازید، در همان Advanced جایگزین و ذخیره کنید. اینباندهای کاربران تغییر نمی‌کنند.</li><li>{isXray ? 'ساب یک کاربر را در برنامه سازگار با XHTTP بروزرسانی و کانفیگ Iran Xray را امتحان کنید.' : 'از صفحه یک کاربر، فایل «اتصال از ایران» را وارد strongSwan و اتصال اینترنت را تست کنید.'}</li></ol>
+      <p className="text-xs text-muted">ترکیب JSON داخل مرورگر انجام می‌شود؛ متن پنل ایران به سرور ارسال نمی‌شود. برای ارتباط ایران با خارج می‌توانید خروجی تونل موجود را انتخاب کنید. direct فقط وقتی مناسب است که ارتباط مستقیم ایران به خارج واقعاً کار کند؛ برای استقلال از تونل دیگر، خروجی آن باید روی سرور ایران آماده باشد.</p>
       <textarea className="input w-full font-mono text-xs" dir="ltr" rows={8} aria-label="قالب فعلی Advanced ایران" placeholder="متن کامل JSON فعلی پنل ایران" value={original} onChange={e => { setOriginal(e.target.value); setResult(''); }} />
       <button className="btn btn-secondary" disabled={!original || dirty || generate.isPending || save.isPending} onClick={() => generate.mutate()}>ساخت تنظیم جدید با حفظ تنظیمات فعلی</button>
       {dirty && <p className="text-sm text-amber-300">ابتدا تغییرات بالا را ذخیره کنید.</p>}
       {result && !dirty && <><textarea className="input w-full font-mono text-xs" dir="ltr" rows={10} readOnly aria-label="قالب آماده سرور ایران" value={result} /><button className="btn btn-primary" onClick={async () => { try { await navigator.clipboard.writeText(result); toast('تنظیم جدید کپی شد.', 'success'); } catch { toast('متن کادر را انتخاب و کپی کنید.', 'error'); } }}><Copy size={16} /> کپی تنظیم جدید</button></>}
-      <p className="text-sm text-muted leading-7">خاموش‌کردن این گزینه، اتصال همین مسیر را در سرور خارجی قطع می‌کند؛ فایل‌های اصلی کاربران باقی می‌مانند. بکاپ و میگریشن، تنظیمات و گواهی را منتقل می‌کنند. اگر دامنه اصلی خارجی ثابت بماند، فقط DNS آن را پس از انتقال اصلاح کنید؛ در صورت تغییر دامنه اصلی، تنظیم ایران را دوباره بسازید.</p>
+      <p className="text-sm text-muted leading-7">خاموش‌کردن این گزینه، اتصال همین مسیر را در سرور خارجی قطع می‌کند؛ فایل‌های اصلی کاربران باقی می‌مانند. بکاپ و میگریشن، تنظیمات، مصرف و گواهی‌های فعلی را منتقل می‌کنند. اگر دامنه اصلی خارجی ثابت بماند، فقط DNS آن را پس از انتقال اصلاح کنید؛ در صورت تغییر دامنه اصلی، تنظیم ایران را دوباره بسازید.</p>
     </GlassCard>
   </div>;
 }

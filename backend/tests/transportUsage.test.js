@@ -51,5 +51,15 @@ test('PostgreSQL: transport counters share quota, retain legacy usage and remain
       assert.equal(Number(row.usage_total) - Number(row.xray_usage_bytes), 500);
       assert.equal((await db.query('SELECT bytes FROM usage_daily WHERE user_id=$1', [user.id])).rows[0].bytes, '310');
       assert.equal((await db.query('SELECT count(*) FROM user_activity_daily WHERE user_id=$1', [user.id])).rows[0].count, '1');
+      await record('iran', 300); await record('iran', 300);
+      await record('iran', 20, 'boot-c');
+      const iran = (await db.query('SELECT * FROM vpn_users WHERE id=$1', [user.id])).rows[0];
+      assert.equal(iran.usage_total, '2130'); assert.equal(iran.xray_usage_bytes, '1630');
+      assert.equal(iran.netlify_usage_bytes, '210'); assert.equal(iran.xray_iran_usage_bytes, '320');
+      assert.equal(iran.xray_legacy_usage_bytes, '1000'); assert.equal(iran.xray_uuid, row.xray_uuid);
+      assert.deepEqual((await db.query('SELECT bytes,xray_iran_bytes FROM usage_daily WHERE user_id=$1', [user.id])).rows[0], { bytes: '630', xray_iran_bytes: '320' });
+      await db.query(await fs.readFile(new URL('014_xray_iran_relay.sql', folder), 'utf8'));
+      assert.equal((await db.query('SELECT usage_total FROM vpn_users WHERE id=$1', [user.id])).rows[0].usage_total, '2130');
+
     } finally { await db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await db.end(); }
   });

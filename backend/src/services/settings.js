@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { WARP_DEFAULTS } from './warpDefaults.js';
 import { NETLIFY_DEFAULTS, validRelayHostname } from './netlifyConfig.js';
 import { IKE_RELAY_DEFAULTS, ikeRelaySchema } from './ikeRelayConfig.js';
+import { XRAY_RELAY_DEFAULTS, xrayRelaySchema, xrayRelayPolicy } from './xrayRelayConfig.js';
 
 const DEFAULTS = {
   general: { panelName: config.panelName, timezone: config.timezone, domain: '' },
@@ -19,6 +20,7 @@ const DEFAULTS = {
   xray: { enabled: true },
   netlify: NETLIFY_DEFAULTS,
   ikeRelay: IKE_RELAY_DEFAULTS,
+  xrayRelay: XRAY_RELAY_DEFAULTS,
   warp: WARP_DEFAULTS,
   telegram: {
     enabled: false,
@@ -45,6 +47,7 @@ const DEFAULTS = {
 
 const SETTINGS_SCHEMAS = {
   ikeRelay: ikeRelaySchema,
+  xrayRelay: xrayRelaySchema,
   netlify: z.object({
     enabled: z.boolean().optional(),
     hostname: z.string().trim().toLowerCase().refine(value => value === '' || validRelayHostname(value), 'Enter a hostname without https or a path').optional(),
@@ -156,6 +159,10 @@ export async function updateSettings(section, value) {
   }
 
   const patch = { ...parsed.data };
+  if (section === 'xrayRelay') {
+    const policy = xrayRelayPolicy({ ...await getSetting(section), ...patch });
+    if (policy.hostname === new URL(config.publicBaseUrl).hostname) throw new Error('RELAY_ORIGIN_MUST_DIFFER');
+  }
   if (section === 'vpn') {
     if (Object.hasOwn(patch, 'serverAddress')) patch.serverAddress = patch.serverAddress.trim();
     if (Object.hasOwn(patch, 'remoteId')) patch.remoteId = patch.remoteId.trim();

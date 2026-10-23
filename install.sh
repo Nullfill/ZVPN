@@ -380,6 +380,7 @@ sleep 2
 
 # 18. Health Check & Completion Banner
 (cd "$APP/backend" && node scripts/netlify-status.js) || warn "Check Netlify settings in the admin panel"
+(cd "$APP/backend" && node scripts/xray-relay-status.js) || warn "Check Iran Xray settings in the admin panel"
 if [[ -n "$IKE_RELAY_HOSTNAME" ]]; then
   (cd "$APP/backend" && runuser -u zvpn -- env ZVPN_IKE_RELAY_HOSTNAME="$IKE_RELAY_HOSTNAME" \
     ZVPN_IKE_RELAY_PORT="$IKE_RELAY_PORT" ZVPN_IKE_RELAY_OUTBOUND="$IKE_RELAY_OUTBOUND" \

@@ -1,11 +1,12 @@
 import { GlassCard } from './UI';
 import { fmtBytes } from '../lib/format';
 
-export default function TrafficBreakdown({ total, ike, direct, netlify, legacy, iran = 0, title = 'آمار مصرف بر اساس مسیر اتصال' }:
-  { total: number; ike: number; direct: number; netlify: number; legacy: number; iran?: number; title?: string }) {
+export default function TrafficBreakdown({ total, ike, direct, netlify, legacy, iran = 0, xrayIran = 0, title = 'آمار مصرف بر اساس مسیر اتصال' }:
+  { total: number; ike: number; direct: number; netlify: number; legacy: number; iran?: number; xrayIran?: number; title?: string }) {
   const parts = [
     { name: 'IKEv2', value: ike, color: '#818cf8' },
     { name: 'IKEv2 از ایران', value: iran, color: '#fbbf24' },
+    { name: 'Xray از ایران', value: xrayIran, color: '#fb923c' },
     { name: 'Xray مستقیم', value: direct, color: '#22d3ee' },
     { name: 'Netlify', value: netlify, color: '#34d399' },
     { name: 'Xray پیش از تفکیک', value: legacy, color: '#94a3b8' },

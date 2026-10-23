@@ -1,5 +1,6 @@
 import { isIP } from 'node:net';
 import { xrayLink } from './xrayConfig.js';
+import { xrayRelayLink } from './xrayRelayConfig.js';
 
 export const NETLIFY_DEFAULTS = { enabled: false, hostname: '' };
 export const RELAY_EXTRA = Object.freeze({
@@ -29,5 +30,6 @@ export function connectionLinks(user, baseUrl, settings) {
   if (settings?.xray?.enabled === false) return [];
   const direct = xrayLink(user, baseUrl);
   const relay = netlifyLink(user, baseUrl, settings?.netlify);
-  return relay ? [direct, relay] : [direct];
+  const iran = xrayRelayLink(user, baseUrl, settings?.xrayRelay);
+  return [direct, relay, iran].filter(Boolean);
 }

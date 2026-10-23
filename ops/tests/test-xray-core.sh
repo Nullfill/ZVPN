@@ -28,7 +28,7 @@ import {buildXrayConfig} from './backend/src/services/xrayConfig.js';
 const root=process.argv[2];
 const pin=createHash('sha256').update(new X509Certificate(fs.readFileSync(root+'/cert.pem')).raw).digest('hex');
 const user={id:'11111111-1111-4111-8111-111111111111',xray_uuid:'22222222-2222-4222-8222-222222222222',enabled:true,quota_blocked:false};
-const server=buildXrayConfig([user]);server.log.loglevel='debug';
+const server=buildXrayConfig([user],true,true);server.log.loglevel='debug';
 // Recent cores block private destinations for VLESS by default. The disposable
 // fixture serves exactly this loopback TCP port; production keeps the default.
 server.outbounds[0].settings={finalRules:[{action:'allow',network:'tcp',ip:['127.0.0.1/32'],port:18080}]};
@@ -42,6 +42,8 @@ fs.writeFileSync(root+'/client.json',JSON.stringify({
 const relay=JSON.parse(fs.readFileSync(root+'/client.json'));relay.inbounds[0].port=11081;
 relay.outbounds[0].streamSettings.xhttpSettings.path='/zvpn-netlify/';
 fs.writeFileSync(root+'/relay-client.json',JSON.stringify(relay));
+relay.inbounds[0].port=11082;relay.outbounds[0].streamSettings.xhttpSettings.path='/zvpn-iran/';
+fs.writeFileSync(root+'/iran-client.json',JSON.stringify(relay));
 JS
 "$WORK/xray" run -test -config "$WORK/server.json"
 # Exercise the production helper with an extensionless temporary file too.
@@ -99,12 +101,20 @@ for attempt in {1..5}; do
   sleep 1
 done
 [[ "$(wc -c < "$WORK/relay-response")" -eq 1048576 ]] || { cat "$WORK/server.log" "$WORK/relay-client.log"; exit 1; }
+"$WORK/xray" run -config "$WORK/iran-client.json" > "$WORK/iran-client.log" 2>&1 &
+PIDS+=("$!")
+for attempt in {1..5}; do
+  if curl --fail --silent --show-error --max-time 10 --noproxy '' --socks5-hostname 127.0.0.1:11082 http://127.0.0.1:18080 > "$WORK/iran-response"; then break; fi
+  sleep 1
+done
+[[ "$(wc -c < "$WORK/iran-response")" -eq 1048576 ]] || { cat "$WORK/server.log" "$WORK/iran-client.log"; exit 1; }
 "$WORK/xray" api statsquery --server=127.0.0.1:10086 -pattern 'user>>>' > "$WORK/stats.json"
 node --input-type=module - "$WORK/stats.json" <<'JS'
 import fs from 'node:fs';import assert from 'node:assert/strict';import {parseXrayStats} from './backend/src/services/xrayConfig.js';
 const stats=parseXrayStats(JSON.parse(fs.readFileSync(process.argv[2])));
-assert.equal(stats.size,2);for(const counter of stats.values())assert.ok(counter.downlink>=1048576n);
+assert.equal(stats.size,3);for(const counter of stats.values())assert.ok(counter.downlink>=1048576n);
 assert.equal([...stats.values()].filter(x=>x.transport==='netlify').length,1);
+assert.equal([...stats.values()].filter(x=>x.transport==='iran').length,1);
 console.log('TLS/XHTTP connection and per-user traffic confirmed');
 JS
 # Hard revocation includes established streams because the core is restarted.
@@ -117,5 +127,8 @@ if curl --fail --silent --max-time 5 --noproxy '' --socks5-hostname 127.0.0.1:11
 fi
 if curl --fail --silent --max-time 5 --noproxy '' --socks5-hostname 127.0.0.1:11081 http://127.0.0.1:18080 >/dev/null; then
   echo 'Revoked relay user still connected' >&2;exit 1
+fi
+if curl --fail --silent --max-time 5 --noproxy '' --socks5-hostname 127.0.0.1:11082 http://127.0.0.1:18080 >/dev/null; then
+  echo 'Revoked Iran user still connected' >&2;exit 1
 fi
 echo 'Revocation verified for direct and relay connections'

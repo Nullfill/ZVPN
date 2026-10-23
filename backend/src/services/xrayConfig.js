@@ -15,7 +15,7 @@ export function xrayIdentity(user) {
   return { id: user.xray_uuid, email: `zvpn-${user.id}`, level: 0 };
 }
 
-export function buildXrayConfig(users, enabled = true) {
+export function buildXrayConfig(users, enabled = true, iranEnabled = false) {
   return {
     log: { loglevel: 'warning' },
     api: { tag: 'api', services: ['StatsService'] },
@@ -29,6 +29,9 @@ export function buildXrayConfig(users, enabled = true) {
       { tag: 'zvpn-netlify', listen: '127.0.0.1', port: 10090, protocol: 'vless',
         settings: { clients: enabled ? users.filter(u => eligibleUser(u)).map(u => ({ ...xrayIdentity(u), email: `zvpn-netlify-${u.id}` })) : [], decryption: 'none' },
         streamSettings: { network: 'xhttp', security: 'none', xhttpSettings: { path: '/zvpn-netlify/', mode: 'auto' } } },
+      { tag: 'zvpn-iran', listen: '127.0.0.1', port: 10091, protocol: 'vless',
+        settings: { clients: enabled && iranEnabled ? users.filter(u => eligibleUser(u)).map(u => ({ ...xrayIdentity(u), email: `zvpn-iran-${u.id}` })) : [], decryption: 'none' },
+        streamSettings: { network: 'xhttp', security: 'none', xhttpSettings: { path: '/zvpn-iran/', mode: 'auto' } } },
     ],
     outbounds: [{ tag: 'direct', protocol: 'freedom' }],
     routing: { rules: [{ type: 'field', inboundTag: ['api-in'], outboundTag: 'api' }] },
@@ -47,13 +50,14 @@ export function xrayLink(user, baseUrl) {
 export function parseXrayStats(data) {
   const result = new Map();
   for (const stat of data.stat || []) {
-    const match = /^user>>>zvpn-(netlify-)?([0-9a-f-]{36})>>>traffic>>>(uplink|downlink)$/.exec(stat.name || '');
+    const match = /^user>>>zvpn-(netlify-|iran-)?([0-9a-f-]{36})>>>traffic>>>(uplink|downlink)$/.exec(stat.name || '');
     if (!match || !UUID_RE.test(match[2])) continue;
     if (typeof stat.value === 'number' && !Number.isSafeInteger(stat.value)) throw new Error('INVALID_XRAY_COUNTER');
     const value = BigInt(stat.value ?? 0);
     if (value < 0n) throw new Error('INVALID_XRAY_COUNTER');
-    const key = match[1] ? `${match[2]}:netlify` : match[2];
-    const item = result.get(key) || { uplink: 0n, downlink: 0n, ...(match[1] ? { userId: match[2], transport: 'netlify' } : {}) };
+    const transport = match[1]?.slice(0, -1);
+    const key = transport ? `${match[2]}:${transport}` : match[2];
+    const item = result.get(key) || { uplink: 0n, downlink: 0n, ...(transport ? { userId: match[2], transport } : {}) };
     item[match[3]] = value;
     result.set(key, item);
   }

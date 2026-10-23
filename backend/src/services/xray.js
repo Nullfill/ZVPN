@@ -85,7 +85,8 @@ export async function syncXray() {
   let warpError = null;
   try { warpChanged = await prepareWarpPolicy(users); }
   catch (error) { error.optionalWarp = true; warpError = error; }
-  const json = JSON.stringify(buildXrayConfig(users, settings.enabled !== false), null, 2) + '\n';
+  const relay = await getSetting('xrayRelay');
+  const json = JSON.stringify(buildXrayConfig(users, settings.enabled !== false, relay.enabled === true), null, 2) + '\n';
   // Root owns the applied config; this comparison is against the readable runtime copy.
   const desired = await fs.readFile(XRAY_RUNTIME_CONFIG, 'utf8').catch(() => '');
   if (!warpChanged && desired === json && (await helper('xray-epoch')).trim() !== 'stopped') {
