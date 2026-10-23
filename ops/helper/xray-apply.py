@@ -28,9 +28,13 @@ def validate(data):
     return data
 
 def test_config(binary, path):
-    # Temporary filenames must not determine the parser used for trusted JSON.
-    result=subprocess.run([binary,'run','-test','-format','json','-config',path],
-                          capture_output=True,text=True)
+    # New cores may dispatch by filename extension even with -format=json.
+    # Use a private .json copy, including for extensionless backup/temp files.
+    with tempfile.TemporaryDirectory(prefix='zvpn-xray-check-') as directory:
+        probe=pathlib.Path(directory)/'config.json'
+        probe.write_bytes(pathlib.Path(path).read_bytes())
+        result=subprocess.run([binary,'run','-test','-format','json','-config',str(probe)],
+                              capture_output=True,text=True,timeout=20)
     if result.returncode:
         raise RuntimeError('Xray configuration validation failed: '+
                            (result.stdout+result.stderr).strip())
