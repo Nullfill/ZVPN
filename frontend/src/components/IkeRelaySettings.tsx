@@ -19,9 +19,19 @@ export default function IkeRelaySettings({ kind = 'ike' }: { kind?: 'ike' | 'xra
   useEffect(() => { if (!form && settings.data?.settings[section]) setForm(settings.data.settings[section]); }, [form, settings.data, section]);
   const save = useMutation({
     mutationFn: () => api<{ settings: Policy }>(`/api/settings/${section}`, { method: 'PATCH', body: JSON.stringify(form) }),
-    onSuccess: response => { setForm(response.settings); setResult(''); toast('تنظیمات مسیر ایران ذخیره شد.', 'success'); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: [endpoint, 'status'] }); },
+    onSuccess: response => { setForm(response.settings); setResult(''); toast('تنظیمات مسیر ایران ذخیره شد.', 'success'); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: [endpoint, 'status'] }); qc.invalidateQueries({ queryKey: [endpoint, 'template'] }); },
     onError: () => toast('اعمال تنظیمات انجام نشد؛ دامنه و وضعیت سرور را بررسی کنید. اتصال اصلی برقرار می‌ماند.', 'error'),
   });
+  const readyTemplate = useQuery({
+    queryKey: [endpoint, 'template', settings.data?.settings[section]],
+    queryFn: () => api<{ fragment: Template; origin: string }>(`/api/${endpoint}/template`),
+    enabled: Boolean(settings.data?.settings[section]?.hostname) && !save.isPending,
+    retry: false,
+  });
+  const copy = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); toast('تنظیمات کپی شد.', 'success'); }
+    catch { toast('متن کادر را انتخاب و کپی کنید.', 'error'); }
+  };
   const generate = useMutation({
     mutationFn: () => api<{ fragment: Template }>(`/api/${endpoint}/template`),
     onSuccess: ({ fragment }) => {
@@ -69,12 +79,27 @@ export default function IkeRelaySettings({ kind = 'ike' }: { kind?: 'ike' | 'xra
     </GlassCard>
     <GlassCard className="space-y-4">
       <h3 className="font-bold">آماده‌سازی تنظیمات پنل ایران</h3>
-      <ol className="list-decimal list-inside space-y-2 text-sm leading-7"><li>تنظیمات بالا را ذخیره کنید.</li><li>متن کامل Advanced پنل ایران را به‌عنوان بکاپ نگه دارید و در کادر زیر قرار دهید.</li><li>تنظیم جدید را بسازید، در همان Advanced جایگزین و ذخیره کنید. اینباندهای کاربران تغییر نمی‌کنند.</li><li>{isXray ? 'ساب یک کاربر را در برنامه سازگار با XHTTP بروزرسانی و کانفیگ Iran Xray را امتحان کنید.' : 'از صفحه یک کاربر، فایل «اتصال از ایران» را وارد strongSwan و اتصال اینترنت را تست کنید.'}</li></ol>
+      <p className="text-sm leading-7 text-muted">تنظیم مخصوص این مسیر پس از ذخیره، خودکار در کادر زیر نمایش داده می‌شود. برای دریافت متن کامل Advanced با حفظ اتصال‌های دیگر، از بخش ترکیب تنظیمات استفاده کنید.</p>
+      {dirty ? <p className="text-sm text-amber-300">ابتدا تغییرات بالا را ذخیره کنید تا تنظیم آماده بروزرسانی شود.</p>
+        : !settings.data?.settings[section]?.hostname ? <p className="text-sm text-muted">ابتدا دامنه ایران را در بخش بالا وارد و ذخیره کنید.</p>
+        : readyTemplate.isPending ? <p className="text-sm text-muted">در حال آماده‌سازی تنظیم مسیر…</p>
+        : readyTemplate.isError ? <div className="space-y-2"><p className="text-sm text-amber-300">دریافت تنظیم آماده انجام نشد؛ دامنه‌های ایران و خارج را بررسی کنید.</p><button className="btn btn-secondary" onClick={() => readyTemplate.refetch()}>دریافت دوباره</button></div>
+        : readyTemplate.data && <div className="space-y-3 rounded-xl border border-[var(--line)] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-bold">قطعه آمادهٔ این مسیر</h4><span className="badge">آماده</span></div>
+          <p className="text-sm text-muted">پورت {form.port} ایران ← خروجی <b dir="ltr">{form.outboundTag}</b> ← <b dir="ltr">{readyTemplate.data.origin}</b></p>
+          <textarea className="input w-full font-mono text-xs" dir="ltr" rows={13} readOnly aria-label="قطعه آماده تنظیم مسیر ایران" value={JSON.stringify(readyTemplate.data.fragment, null, 2)} />
+          <button className="btn btn-secondary" onClick={() => copy(JSON.stringify(readyTemplate.data!.fragment, null, 2))}><Copy size={16} /> کپی قطعه تنظیم مسیر</button>
+          <p className="text-xs leading-6 text-muted">این قطعه، کل تنظیمات Advanced نیست. برای جایگزینی متن کامل Advanced، خروجی بخش ترکیب زیر را بسازید تا تنظیمات اتصال‌های دیگر حفظ شوند.</p>
+        </div>}
+      <div className="space-y-4 border-t border-[var(--line)] pt-4">
+      <h4 className="font-bold">ساخت متن کامل Advanced با حفظ تنظیمات فعلی</h4>
+      <ol className="list-decimal list-inside space-y-2 text-sm leading-7"><li>متن فعلی تب All در Advanced پنل ایران را کپی کنید و یک نسخه بکاپ نگه دارید.</li><li>آن را در کادر ورودی زیر قرار دهید و «ترکیب و ساخت متن کامل» را بزنید.</li><li>خروجی ساخته‌شده را در همان تب All جایگزین و ذخیره کنید.</li><li>{isXray ? 'ساب یک کاربر را در برنامه سازگار با XHTTP بروزرسانی و کانفیگ Iran Xray را امتحان کنید.' : 'از صفحه یک کاربر، فایل «اتصال از ایران» را وارد strongSwan و اتصال اینترنت را تست کنید.'}</li></ol>
       <p className="text-xs text-muted">ترکیب JSON داخل مرورگر انجام می‌شود؛ متن پنل ایران به سرور ارسال نمی‌شود. برای ارتباط ایران با خارج می‌توانید خروجی تونل موجود را انتخاب کنید. direct فقط وقتی مناسب است که ارتباط مستقیم ایران به خارج واقعاً کار کند؛ برای استقلال از تونل دیگر، خروجی آن باید روی سرور ایران آماده باشد.</p>
-      <textarea className="input w-full font-mono text-xs" dir="ltr" rows={8} aria-label="قالب فعلی Advanced ایران" placeholder="متن کامل JSON فعلی پنل ایران" value={original} onChange={e => { setOriginal(e.target.value); setResult(''); }} />
-      <button className="btn btn-secondary" disabled={!original || dirty || generate.isPending || save.isPending} onClick={() => generate.mutate()}>ساخت تنظیم جدید با حفظ تنظیمات فعلی</button>
-      {dirty && <p className="text-sm text-amber-300">ابتدا تغییرات بالا را ذخیره کنید.</p>}
-      {result && !dirty && <><textarea className="input w-full font-mono text-xs" dir="ltr" rows={10} readOnly aria-label="قالب آماده سرور ایران" value={result} /><button className="btn btn-primary" onClick={async () => { try { await navigator.clipboard.writeText(result); toast('تنظیم جدید کپی شد.', 'success'); } catch { toast('متن کادر را انتخاب و کپی کنید.', 'error'); } }}><Copy size={16} /> کپی تنظیم جدید</button></>}
+      <label className="block space-y-2"><span className="text-sm font-bold">ورودی: متن فعلی Advanced ایران</span><textarea className="input w-full font-mono text-xs" dir="ltr" rows={8} aria-label="قالب فعلی Advanced ایران" placeholder="این کادر ورودی است؛ متن فعلی تب All پنل ایران را اینجا قرار دهید." value={original} onChange={e => { setOriginal(e.target.value); setResult(''); }} /></label>
+      {!original && <p className="text-xs text-muted">خالی‌بودن این کادر طبیعی است؛ تنظیم آمادهٔ مسیر در بالای همین بخش قرار دارد.</p>}
+      <button className="btn btn-secondary" disabled={!original.trim() || dirty || generate.isPending || save.isPending} onClick={() => generate.mutate()}>{generate.isPending ? 'در حال ترکیب…' : 'ترکیب و ساخت متن کامل'}</button>
+      {result && !dirty && <div className="space-y-3"><h4 className="font-bold">خروجی: متن کامل آماده برای Advanced ایران</h4><textarea className="input w-full font-mono text-xs" dir="ltr" rows={10} readOnly aria-label="قالب آماده سرور ایران" value={result} /><button className="btn btn-primary" onClick={() => copy(result)}><Copy size={16} /> کپی متن کامل آماده</button></div>}
+      </div>
       <p className="text-sm text-muted leading-7">خاموش‌کردن این گزینه، اتصال همین مسیر را در سرور خارجی قطع می‌کند؛ فایل‌های اصلی کاربران باقی می‌مانند. بکاپ و میگریشن، تنظیمات، مصرف و گواهی‌های فعلی را منتقل می‌کنند. اگر دامنه اصلی خارجی ثابت بماند، فقط DNS آن را پس از انتقال اصلاح کنید؛ در صورت تغییر دامنه اصلی، تنظیم ایران را دوباره بسازید.</p>
     </GlassCard>
   </div>;
