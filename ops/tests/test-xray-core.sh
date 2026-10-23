@@ -29,6 +29,9 @@ const root=process.argv[2];
 const pin=createHash('sha256').update(new X509Certificate(fs.readFileSync(root+'/cert.pem')).raw).digest('hex');
 const user={id:'11111111-1111-4111-8111-111111111111',xray_uuid:'22222222-2222-4222-8222-222222222222',enabled:true,quota_blocked:false};
 const server=buildXrayConfig([user]);server.log.loglevel='debug';
+// Recent cores block private destinations for VLESS by default. The disposable
+// fixture serves exactly this loopback TCP port; production keeps the default.
+server.outbounds[0].settings={finalRules:[{action:'allow',network:'tcp',ip:['127.0.0.1/32'],port:18080}]};
 fs.writeFileSync(root+'/server.json',JSON.stringify(server));
 fs.writeFileSync(root+'/empty.json',JSON.stringify(buildXrayConfig([])));
 fs.writeFileSync(root+'/client.json',JSON.stringify({
@@ -49,6 +52,7 @@ spec=importlib.util.spec_from_file_location('xray_apply','ops/helper/xray-apply.
 helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)
 managed=json.loads((root/'server.json').read_text())
 managed['log']={'loglevel':'warning'}
+managed['outbounds']=[{'tag':'direct','protocol':'freedom'}]
 helper.validate(managed)
 probe=root/'helper-config-probe';probe.write_bytes((root/'empty.json').read_bytes())
 helper.test_config(str(root/'xray'),str(probe))
