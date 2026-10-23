@@ -14,6 +14,7 @@ import time
 RUNTIME = Path('/opt/zvpn-panel/runtime')
 MAIN = Path('/etc/ipsec.conf')
 CONNECTION = Path('/etc/ipsec.d/zvpn-ike-relay.conf')
+LEGACY = Path('/etc/ipsec.d/ir-ike-test.conf')
 CERT = Path('/etc/ipsec.d/certs/zvpn-ike-relay-cert.pem')
 STATE = Path('/etc/zvpn/ike-relay.json')
 CA = Path('/etc/ipsec.d/cacerts/ikev2-ca-cert.pem')
@@ -112,7 +113,7 @@ def apply(policy):
     policy = validate(policy)
     # A rollback includes every file touched; no system-wide service restart.
     files = [MAIN, CONNECTION, CERT, STATE]
-    legacy = Path('/etc/ipsec.d/ir-ike-test.conf')
+    legacy = LEGACY
     adopt_legacy = (legacy.is_file() and not legacy.is_symlink() and
                     'leftcert=ir-ike-test-cert.pem' in legacy.read_text() and
                     ('leftid=' + policy['hostname']) in legacy.read_text() and policy['hostname'])

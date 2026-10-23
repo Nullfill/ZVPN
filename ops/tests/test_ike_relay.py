@@ -24,7 +24,7 @@ class RelayTests(unittest.TestCase):
     def test_additive_apply_preserves_production_certificate_and_rolls_back_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            paths = dict(MAIN=root/'ipsec.conf', CONNECTION=root/'relay.conf', CERT=root/'relay-cert.pem', STATE=root/'state.json', RUNTIME=root/'runtime')
+            paths = dict(MAIN=root/'ipsec.conf', CONNECTION=root/'relay.conf', LEGACY=root/'legacy.conf', CERT=root/'relay-cert.pem', STATE=root/'state.json', RUNTIME=root/'runtime')
             paths['RUNTIME'].mkdir()
             main = b'config setup\nconn ikev2-vpn\n    leftcert=production.pem\n'
             paths['MAIN'].write_bytes(main)
