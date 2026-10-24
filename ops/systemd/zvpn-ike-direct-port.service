@@ -1,0 +1,15 @@
+[Unit]
+Description=ZVPN optional direct Android IKE port 14453
+After=network-pre.target
+Before=strongswan-starter.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/sbin/iptables -t nat -D PREROUTING -p udp --dport 14453 -m comment --comment zvpn-ike-direct-port -j REDIRECT --to-ports 4500
+ExecStart=/usr/sbin/iptables -t nat -I PREROUTING 1 -p udp --dport 14453 -m comment --comment zvpn-ike-direct-port -j REDIRECT --to-ports 4500
+ExecStop=/usr/sbin/iptables -t nat -D PREROUTING -p udp --dport 14453 -m comment --comment zvpn-ike-direct-port -j REDIRECT --to-ports 4500
+
+[Install]
+WantedBy=multi-user.target

@@ -155,6 +155,9 @@ def restore(root):
     run(['bash',str(app/'ops/install-helper-permissions.sh')])
     run(['npm','ci','--omit=dev','--ignore-scripts'],cwd=app/'backend')
     run(['nginx','-t']);run(['systemctl','daemon-reload'])
+    # Only restore the extra direct port on servers that had explicitly enabled it.
+    if (root/'systemd/zvpn-ike-direct-port.service').is_file():
+        run(['systemctl','enable','--now','zvpn-ike-direct-port.service'])
     run(['systemctl','restart','strongswan-starter','zvpn-panel','nginx'])
     run(['systemctl','enable','strongswan-starter','zvpn-panel','xray','nginx'])
     run(['bash',str(app/'doctor.sh')])

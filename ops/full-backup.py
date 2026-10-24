@@ -98,7 +98,7 @@ def collect(destination):
                 os.chmod(target/name,0o600)
             else: shutil.copy2(source,target/name)
     systemd = destination / 'systemd'; systemd.mkdir(exist_ok=True)
-    for name in ('zvpn-panel.service', 'xray.service', 'zvpn-warp-router.service'):
+    for name in ('zvpn-panel.service', 'xray.service', 'zvpn-warp-router.service', 'zvpn-ike-direct-port.service'):
         src = Path('/etc/systemd/system') / name
         if src.is_file(): shutil.copy2(src, systemd / name)
         dropins = Path('/etc/systemd/system') / (name + '.d')

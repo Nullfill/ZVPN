@@ -61,6 +61,7 @@ class FullBackupTests(unittest.TestCase):
                 'var/lib/cloudflare-warp/reg.json':b'{"registration":"original-private-device-identity"}',
                 'var/lib/zvpn-panel/warp/usage.json':b'{"uplink":123,"downlink":456,"daily":{"2026-10-19":579}}',
                 'etc/systemd/system/zvpn-panel.service.d/warp.conf':b'[Service]\nReadWritePaths=/etc/zvpn\n',
+                'etc/systemd/system/zvpn-ike-direct-port.service':b'[Service]\nType=oneshot\n',
             }
             for name,data in files.items():
                 file=fixture/name;file.parent.mkdir(parents=True,exist_ok=True);file.write_bytes(data)
