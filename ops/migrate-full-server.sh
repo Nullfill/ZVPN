@@ -41,6 +41,8 @@ REMOTE_DIR="$("${SSH[@]}" 'mktemp -d /tmp/zvpn-migrate-XXXXXXXX')"
 echo 'Migration complete. Point the existing domain DNS to the new server.'
 echo 'Accounts, shared traffic, Xray UUIDs and the existing IKE/TLS certificates are preserved.'
 echo 'Active connections reconnect; live sessions are not transferred.'
+echo 'Before removing the old server, test the actual exit IP of Netlify and Iran Xray, not only latency or service health.'
+echo 'If Netlify still uses the old IP after DNS changes, redeploy the existing Netlify project and reconnect the client.'
 DOMAIN="$(python3 - /opt/zvpn-panel/app/backend/.env "$TOOLS/full-backup.py" <<'PY'
 import importlib.util,pathlib,sys
 from urllib.parse import urlparse
