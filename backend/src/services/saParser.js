@@ -27,13 +27,29 @@ export function parseSas(raw) {
     .split(/(?=list-sa\s+event\s*\{)/g)
     .map((block) => block.trim())
     .filter((block) => /^list-sa\s+event\s*\{/m.test(block))
+    // An unauthenticated IKE_AUTH attempt is not a connection. In particular,
+    // it must never start an account's first-connect subscription timer.
+    .filter((block) => {
+      const state = rawValue(block.split('child-sas')[0], 'state');
+      return !state || state === 'ESTABLISHED' || state === 'REKEYING';
+    })
     .map((block) => {
       const bytesIn = sumMatches(block, /\bbytes-in\s*=\s*(\d+)/g);
       const bytesOut = sumMatches(block, /\bbytes-out\s*=\s*(\d+)/g);
       const eapId = rawValue(block, 'remote-eap-id');
       const remoteId = rawValue(block, 'remote-id');
       const connection = /^list-sa\s+event\s*\{\s*([^\s{]+)\s*\{/.exec(block)?.[1];
+      const initiator = rawValue(block, 'initiator-spi');
+      const responder = rawValue(block, 'responder-spi');
+      const children = [...block.matchAll(/\{([^{}]*)\}/g)].map(([, child]) => {
+        const spiIn = rawValue(child, 'spi-in');
+        const spiOut = rawValue(child, 'spi-out');
+        return spiIn && spiOut ? { key: `${spiIn}:${spiOut}`, bytesIn: Number(rawValue(child, 'bytes-in') || 0),
+          bytesOut: Number(rawValue(child, 'bytes-out') || 0) } : null;
+      }).filter(Boolean);
       return {
+        ...(initiator && responder ? { identity: `${initiator}:${responder}` } : {}),
+        ...(children.length ? { children } : {}),
         ...(relayTransport(connection) === 'ike-relay' ? { transport: 'ike-relay' } : {}),
         ikeId: rawValue(block, 'uniqueid'),
         remoteId: eapId || remoteId,

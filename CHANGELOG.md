@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## Accounting fixes - 2026-10-24
+
+- Start first-connect subscriptions only after an authenticated IKE connection.
+- Track IKE CHILD counters independently across rekeys and distinguish reused session IDs.
+- Keep upload/download deltas consistent with the billed total and the client's direction.
+- Reset totals and daily/hourly usage atomically without replaying protocol counters.
+- Exclude expired accounts from IKE credentials even if their activation flag is stale.
+- Preserve existing balances; historical polling gaps are not reconstructed or charged retroactively.
+- Keep Linux entrypoints in LF format and invoke the full-backup collector through Python explicitly.
+
 ## [3.0.0] - 2026-08-20
 
 ### 🚀 Major Architectural Refactoring (Multi-Agent Architecture)

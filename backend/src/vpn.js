@@ -18,7 +18,7 @@ export async function syncSecrets() {
   const users = await many(`
     SELECT id, username, secret_enc FROM vpn_users
     WHERE enabled=true AND provisioning_status IN ('active','provisioning','failed')
-      AND (expires_at IS NULL OR expires_at > now() OR activation_status = 'not_activated')
+      AND (expires_at IS NULL OR expires_at > now())
       AND quota_blocked=false ORDER BY username`);
   const lines = ['# Managed by ZVPN Panel.', ...users.map((u) => `${u.username} : EAP "${escapeEapSecret(decryptSecret(u.secret_enc))}"`), ''];
   // A unique file in the destination directory keeps rename atomic while

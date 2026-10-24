@@ -1,10 +1,11 @@
-import { one, many, db } from '../db.js';
+import { one, many, db, tx } from '../db.js';
 import { config } from '../config.js';
 import { encryptSecret, randomPassword, randomToken } from '../crypto.js';
 import { syncSecretsNow, queueSyncSecrets } from './syncQueue.js';
 import { bytes, sanitizeUser, tokenExpiry } from '../utils/format.js';
 import { getLiveSessions, disconnectUser } from '../worker.js';
 import { collectXrayUsage } from './xray.js';
+import { resetUsage } from './usageReset.js';
 
 export function getBaseUrl(req = null) {
   if (req) {
@@ -64,22 +65,23 @@ export async function updateUser(id, data) {
   if (data.resetUsage) await collectXrayUsage();
   const u = await one('SELECT * FROM vpn_users WHERE id=$1', [id]);
   if (!u) return null;
-  await db.query(`UPDATE vpn_users SET enabled=COALESCE($1,enabled),
-    expires_at=CASE WHEN $2::boolean THEN $3::timestamptz ELSE expires_at END,
-    duration_days=CASE WHEN $4::boolean THEN $5::integer ELSE duration_days END,
-    daily_limit_bytes=CASE WHEN $6::boolean THEN $7::bigint ELSE daily_limit_bytes END,
-    total_limit_bytes=CASE WHEN $8::boolean THEN $9::bigint ELSE total_limit_bytes END,
-    unlimited_traffic=CASE WHEN $10::boolean THEN $11::boolean ELSE unlimited_traffic END,
-    max_devices=COALESCE($12,max_devices), note=CASE WHEN $13::boolean THEN $14 ELSE note END,
-    quota_blocked=CASE WHEN $15 THEN false ELSE quota_blocked END, quota_reason=CASE WHEN $15 THEN NULL ELSE quota_reason END, updated_at=now() WHERE id=$16`,
-    [data.enabled ?? null, Object.hasOwn(data, 'expiresAt'), data.expiresAt || null, Object.hasOwn(data, 'durationDays'), data.durationDays ?? null,
-      Object.hasOwn(data, 'dailyLimitBytes'), bytes(data.dailyLimitBytes), Object.hasOwn(data, 'totalLimitBytes'), bytes(data.totalLimitBytes),
-      Object.hasOwn(data, 'unlimitedTraffic'), Boolean(data.unlimitedTraffic), data.maxDevices ?? null, Object.hasOwn(data, 'note'), data.note ?? null,
-      Boolean(data.resetUsage), id]);
-  if (data.resetUsage) {
-    await db.query('UPDATE vpn_users SET usage_total=0, ike_relay_usage_bytes=0, xray_usage_bytes=0, xray_iran_usage_bytes=0, netlify_usage_bytes=0, xray_legacy_usage_bytes=0, upload_bytes=0, download_bytes=0 WHERE id=$1', [id]);
-    await db.query('DELETE FROM usage_daily WHERE user_id=$1', [id]);
-  }
+  await tx(async (client) => {
+    await client.query(`UPDATE vpn_users SET enabled=COALESCE($1,enabled),
+      expires_at=CASE WHEN $2::boolean THEN $3::timestamptz ELSE expires_at END,
+      duration_days=CASE WHEN $4::boolean THEN $5::integer ELSE duration_days END,
+      daily_limit_bytes=CASE WHEN $6::boolean THEN $7::bigint ELSE daily_limit_bytes END,
+      total_limit_bytes=CASE WHEN $8::boolean THEN $9::bigint ELSE total_limit_bytes END,
+      unlimited_traffic=CASE WHEN $10::boolean THEN $11::boolean ELSE unlimited_traffic END,
+      max_devices=COALESCE($12,max_devices), note=CASE WHEN $13::boolean THEN $14 ELSE note END,
+      quota_blocked=CASE WHEN $15 THEN false ELSE quota_blocked END, quota_reason=CASE WHEN $15 THEN NULL ELSE quota_reason END, updated_at=now() WHERE id=$16`,
+      [data.enabled ?? null, Object.hasOwn(data, 'expiresAt'), data.expiresAt || null, Object.hasOwn(data, 'durationDays'), data.durationDays ?? null,
+        Object.hasOwn(data, 'dailyLimitBytes'), bytes(data.dailyLimitBytes), Object.hasOwn(data, 'totalLimitBytes'), bytes(data.totalLimitBytes),
+        Object.hasOwn(data, 'unlimitedTraffic'), Boolean(data.unlimitedTraffic), data.maxDevices ?? null, Object.hasOwn(data, 'note'), data.note ?? null,
+        Boolean(data.resetUsage), id]);
+    if (data.resetUsage) {
+      await resetUsage(client, id);
+    }
+  });
   queueSyncSecrets();
   if (data.enabled === false) disconnectUser(u.username).catch(() => {});
   return getUserById(id);

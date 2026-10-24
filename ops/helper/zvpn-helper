@@ -70,7 +70,7 @@ case "$ACTION" in
     exec /usr/local/libexec/zvpn/warp-router.py rotate-ip
     ;;
   full-backup)
-    exec /usr/local/libexec/zvpn/full-backup.py
+    exec python3 /usr/local/libexec/zvpn/full-backup.py
     ;;
   sync-xray)
     exec /usr/local/libexec/zvpn/xray-apply.py
