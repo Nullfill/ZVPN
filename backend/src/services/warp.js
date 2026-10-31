@@ -8,6 +8,9 @@ const runtime = '/opt/zvpn-panel/runtime/warp.json';
 
 export async function prepareWarpPolicy(users) {
   const settings = await getSetting('warp');
+  if (settings.enabled && settings.provider === 'psiphon' && !await fs.access('/usr/local/bin/zvpn-psiphon').then(() => true, () => false)) {
+    throw new Error('PSIPHON_NOT_INSTALLED_RUN_UPGRADE');
+  }
   const installed = await fs.access('/usr/local/libexec/zvpn/warp-router.py').then(() => true, () => false);
   if (!installed) {
     if (settings.enabled) throw new Error('WARP_NOT_INSTALLED_RUN_INSTALL_WARP');
@@ -28,11 +31,18 @@ export async function prepareWarpPolicy(users) {
 }
 
 export async function getWarpStatus() {
-  const installed = await fs.access('/usr/bin/warp-cli').then(() => true, () => false);
+  const settings = await getSetting('warp');
+  const providers = {
+    warp: await fs.access('/usr/bin/warp-cli').then(() => true, () => false),
+    psiphon: await fs.access('/usr/local/bin/zvpn-psiphon').then(() => true, () => false),
+  };
+  const provider = settings.provider || 'warp';
+  const installed = providers[provider] === true;
   const status = await exec('sudo', [config.helper, 'warp-status'], { timeout: 5000 })
     .then(result => JSON.parse(result.stdout)).catch(() => null);
-  return { installed, ...(status || { state: 'not_ready', totalBytes: 0, todayBytes: 0 }),
-    stale: !status?.updatedAt || Date.now() - Date.parse(status.updatedAt) > 20000 };
+  return { ...(status || { state: 'not_ready', totalBytes: 0, todayBytes: 0 }), installed, providers, provider,
+    stale: !status?.updatedAt || Date.now() - Date.parse(status.updatedAt) > 20000
+      || (status?.provider || 'warp') !== provider };
 }
 
 export async function reconnectWarp() {

@@ -8,6 +8,8 @@ import { WARP_DEFAULTS, GEMINI_DOMAINS, ANTIGRAVITY_DOMAINS } from '../src/servi
 
 test('WARP settings accept explicit domains and user scope but reject executable/routing input', () => {
   assert.equal(validateSettingsPatch('warp', WARP_DEFAULTS).success, true);
+  assert.equal(validateSettingsPatch('warp', { provider: 'psiphon' }).success, true);
+  assert.equal(validateSettingsPatch('warp', { provider: 'http://127.0.0.1:22' }).success, false);
   for (const patch of [{ domains: ['https://google.com/'] }, { domains: [] }, { domains: ['*.google.com'] },
     { scope: 'any' }, { enabled: 'true' }, { userIds: ['root'] }, { command: 'reboot' }, { failureMode: 'shell' }]) {
     assert.equal(validateSettingsPatch('warp', patch).success, false, JSON.stringify(patch));

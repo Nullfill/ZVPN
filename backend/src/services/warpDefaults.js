@@ -20,6 +20,6 @@ export const ANTIGRAVITY_DOMAINS = [
   'googleapis.com', 'googleusercontent.com', 'gstatic.com',
 ];
 export const WARP_DEFAULTS = {
-  enabled: false, scope: 'all', userIds: [], domains: GEMINI_DOMAINS,
+  enabled: false, provider: 'warp', scope: 'all', userIds: [], domains: GEMINI_DOMAINS,
   excludedDomains: [], failureMode: 'block', disableQuic: true,
 };

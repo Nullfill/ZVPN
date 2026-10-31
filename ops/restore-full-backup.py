@@ -35,6 +35,11 @@ def verify_snapshot(root):
                  'ipsec.d/certs/ikev2-server-cert.pem','ipsec.d/private/ikev2-server-key.pem'):
         if name not in manifest['checksums']: raise ValueError('Incomplete full backup: '+name)
     relay=root/'warp-policy/ike-relay.json'
+    route=root/'warp-policy/warp.json'
+    if route.is_file():
+        policy=json.loads(route.read_text())
+        if policy.get('enabled') and policy.get('provider') == 'psiphon' and 'warp-policy/psiphon.json' not in manifest['checksums']:
+            raise ValueError('Incomplete Psiphon backup')
     if relay.is_file() and json.loads(relay.read_text()).get('enabled'):
         for name in ('ipsec.d/zvpn-ike-relay.conf','ipsec.d/certs/zvpn-ike-relay-cert.pem'):
             if name not in manifest['checksums']:

@@ -61,4 +61,7 @@ systemctl reload-or-restart nginx
 if ! bash "$SOURCE_DIR/ops/install-warp.sh"; then
   echo '[WARNING] WARP installation did not complete. VPN and panel remain available; rerun ops/install-warp.sh to retry.' >&2
 fi
+if ! bash "$SOURCE_DIR/ops/install-psiphon.sh"; then
+  echo '[WARNING] Psiphon installation did not complete. Existing VPN services remain available; rerun ops/install-psiphon.sh to retry.' >&2
+fi
 echo "Xray $VERSION installed; accounts are synchronized by ZVPN."

@@ -85,8 +85,11 @@ def collect(destination):
             shutil.copy2(source, target)
     if Path('/etc/zvpn/warp.json').is_file():
         registration = Path('/var/lib/cloudflare-warp')
-        if json.loads(Path('/etc/zvpn/warp.json').read_text()).get('enabled') and not (registration/'reg.json').is_file():
+        policy = json.loads(Path('/etc/zvpn/warp.json').read_text())
+        if policy.get('enabled') and policy.get('provider', 'warp') == 'warp' and not (registration/'reg.json').is_file():
             raise RuntimeError('Incomplete backup: WARP registration unavailable')
+        if policy.get('enabled') and policy.get('provider') == 'psiphon' and not Path('/etc/zvpn/psiphon.json').is_file():
+            raise RuntimeError('Incomplete backup: Psiphon configuration unavailable')
         target = destination/'warp-registration'; target.mkdir(mode=0o700, exist_ok=True)
         for name in ('reg.json', 'settings.json', 'conf.json', 'warp.db'):
             source = registration/name
@@ -98,7 +101,7 @@ def collect(destination):
                 os.chmod(target/name,0o600)
             else: shutil.copy2(source,target/name)
     systemd = destination / 'systemd'; systemd.mkdir(exist_ok=True)
-    for name in ('zvpn-panel.service', 'xray.service', 'zvpn-warp-router.service', 'zvpn-ike-direct-port.service'):
+    for name in ('zvpn-panel.service', 'xray.service', 'zvpn-warp-router.service', 'zvpn-psiphon.service', 'zvpn-ike-direct-port.service'):
         src = Path('/etc/systemd/system') / name
         if src.is_file(): shutil.copy2(src, systemd / name)
         dropins = Path('/etc/systemd/system') / (name + '.d')

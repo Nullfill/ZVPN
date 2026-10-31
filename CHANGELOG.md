@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## 3.4.0 - 2026-10-31
+
+- Add Psiphon as an optional provider in the existing selective Google router.
+- Preserve account/domain filtering, shared quota and historical gateway traffic.
+- Provide provider-aware health checks, reconnect and bounded IP rotation.
+- Install a pinned official Linux client under a dedicated user on loopback only.
+- Preserve Psiphon configuration and installation sources in full backup and migration.
+- Keep old WARP policies compatible; new installations still default to routing off.
+
 ## Accounting fixes - 2026-10-24
 
 - Start first-connect subscriptions only after an authenticated IKE connection.

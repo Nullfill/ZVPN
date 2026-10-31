@@ -165,15 +165,29 @@ def read_counters():
     return stats
 
 
-def probe():
+def provider_name():
+    return (read_policy() or {}).get('provider', 'warp')
+
+
+def connect_provider(provider, restart=False):
+    if provider == 'psiphon':
+        command(['systemctl', 'restart' if restart else 'start', 'zvpn-psiphon.service'])
+    else:
+        command(['warp-cli', '--accept-tos', 'connect'])
+
+
+def probe(provider=None):
+    provider = provider or provider_name()
     start = time.monotonic()
     try:
-        trace = command(['curl', '--fail', '--silent', '--show-error', '--max-time', '8', '--socks5', '127.0.0.1:40000', '-4', 'https://www.cloudflare.com/cdn-cgi/trace'], timeout=10).stdout
+        port = 40002 if provider == 'psiphon' else 40000
+        trace = command(['curl', '--fail', '--silent', '--show-error', '--max-time', '8', '--socks5-hostname', '127.0.0.1:' + str(port), '-4', 'https://www.cloudflare.com/cdn-cgi/trace'], timeout=10).stdout
         fields = dict(line.split('=', 1) for line in trace.splitlines() if '=' in line)
-        return {'healthy': fields.get('warp') == 'on', 'exitIp': fields.get('ip'), 'country': fields.get('loc'),
+        healthy = ipaddress.ip_address(fields.get('ip', '')).is_global and (provider == 'psiphon' or fields.get('warp') == 'on')
+        return {'provider': provider, 'healthy': healthy, 'exitIp': fields.get('ip'), 'country': fields.get('loc'),
                 'latencyMs': round((time.monotonic() - start) * 1000), 'checkedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'error': None}
     except Exception:
-        return {'healthy': False, 'error': 'WARP probe failed', 'checkedAt': datetime.datetime.now(datetime.timezone.utc).isoformat()}
+        return {'provider': provider, 'healthy': False, 'error': provider + ' probe failed', 'checkedAt': datetime.datetime.now(datetime.timezone.utc).isoformat()}
 
 
 def rotate_ip():
@@ -189,18 +203,20 @@ def rotate_ip():
             except (ValueError, OSError): pass
         if time.time() - previous.get('timestamp', 0) < 60:
             return {'outcome': 'cooldown', 'retryAfter': max(1, round(60 - (time.time() - previous['timestamp'])))}
-        before = probe()
+        provider = provider_name()
+        before = probe(provider)
         result = {'beforeIp': before.get('exitIp') if before.get('healthy') else None,
                   'outcome': 'failed', 'timestamp': time.time()}
         # Record the attempt before disruption so rapid retries cannot flap WARP.
         atomic(result_file, result)
         try:
-            command(['warp-cli', '--accept-tos', 'disconnect'], timeout=8)
-            time.sleep(1)
-            command(['warp-cli', '--accept-tos', 'connect'], timeout=8)
-            for _ in range(2):
+            if provider == 'warp':
+                command(['warp-cli', '--accept-tos', 'disconnect'], timeout=8)
+                time.sleep(1)
+            connect_provider(provider, restart=True)
+            for _ in range(5 if provider == 'psiphon' else 2):
                 time.sleep(2)
-                after = probe()
+                after = probe(provider)
                 if after.get('healthy') and after.get('exitIp'):
                     result.update(after)
                     result['afterIp'] = after['exitIp']
@@ -208,7 +224,7 @@ def rotate_ip():
                     break
         except Exception:
             # Always request recovery; do not reset identity or restart VPN cores.
-            try: command(['warp-cli', '--accept-tos', 'connect'], check=False, timeout=8)
+            try: connect_provider(provider)
             except Exception: pass
         result['timestamp'] = time.time()
         atomic(result_file, result)
@@ -251,10 +267,12 @@ def daemon():
             try:
                 policy = read_policy()
                 enabled = bool(policy and policy['enabled'])
-                if enabled and time.monotonic() - last_probe > 30 and not rotating():
-                    health = probe(); last_probe = time.monotonic()
+                provider = (policy or {}).get('provider', 'warp')
+                if enabled and (time.monotonic() - last_probe > 30 or health.get('provider') != provider) and not rotating():
+                    connect_provider(provider)
+                    health = probe(provider); last_probe = time.monotonic()
                     if not health['healthy']:
-                        command(['warp-cli', '--accept-tos', 'connect'], check=False)
+                        connect_provider(provider)
                 desired = gateway_config(policy, health['healthy']) if enabled else None
                 if desired != old_config or (enabled and (not child or child.poll() is not None)):
                     # Drain WARP counters before restarting this sidecar. Shared user
@@ -317,7 +335,7 @@ def main():
     args = parser.parse_args()
     if args.action == 'sync': sync_policy()
     elif args.action == 'cleanup': cleanup(); guard(remove=True)
-    elif args.action == 'reconnect': command(['warp-cli', '--accept-tos', 'connect'])
+    elif args.action == 'reconnect': connect_provider(provider_name(), restart=provider_name() == 'psiphon')
     elif args.action == 'rotate-ip': print(json.dumps(rotate_ip()))
     elif args.action == 'status': print((STATE / 'status.json').read_text())
     else: daemon()

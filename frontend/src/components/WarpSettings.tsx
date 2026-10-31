@@ -6,9 +6,9 @@ import { fmtBytes, fmtDate } from '../lib/format';
 import { GlassCard } from './UI';
 import { useToast } from './Toast';
 
-type Policy = { enabled: boolean; scope: 'all' | 'selected'; userIds: string[]; domains: string[];
+type Policy = { provider: 'warp' | 'psiphon'; enabled: boolean; scope: 'all' | 'selected'; userIds: string[]; domains: string[];
   excludedDomains: string[]; failureMode: 'block' | 'direct'; disableQuic: boolean };
-type Status = { installed: boolean; state: string; healthy?: boolean; stale: boolean; totalBytes: number;
+type Status = { provider?: 'warp' | 'psiphon'; providers?: Record<string, boolean>; installed: boolean; state: string; healthy?: boolean; stale: boolean; totalBytes: number;
   todayBytes: number; uplinkBytes?: number; downlinkBytes?: number; country?: string; exitIp?: string;
   latencyMs?: number; updatedAt?: string; checkedAt?: string; activeIkeSessions?: number; error?: string;
   daily?: Record<string, number> };
@@ -34,7 +34,7 @@ export default function WarpSettings() {
   const save = useMutation({
     mutationFn: () => api('/api/settings/warp', { method: 'PATCH', body: JSON.stringify({ ...form,
       domains: lines(domains), excludedDomains: lines(excluded) }) }),
-    onSuccess: () => { toast('تنظیمات WARP ذخیره و اعمال شد.', 'success'); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['warp-status'] }); },
+    onSuccess: () => { toast('تنظیمات مسیر گوگل ذخیره و اعمال شد.', 'success'); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['warp-status'] }); },
     onError: (e: Error) => toast(e.message, 'error'),
   });
   const toggle = useMutation({
@@ -43,7 +43,7 @@ export default function WarpSettings() {
       setForm(old => old ? { ...old, enabled: result.settings.enabled } : old);
       qc.setQueryData(['settings'], (old: { settings: Record<string, unknown> } | undefined) => old
         ? { ...old, settings: { ...old.settings, warp: result.settings } } : old);
-      toast(result.settings.enabled ? 'WARP روشن شد.' : 'WARP خاموش شد؛ سایت‌ها از مسیر عادی باز می‌شوند.', 'success');
+      toast(result.settings.enabled ? 'مسیر انتخابی روشن شد.' : 'مسیر انتخابی خاموش شد؛ سایت‌ها از مسیر عادی باز می‌شوند.', 'success');
       qc.invalidateQueries({ queryKey: ['warp-status'] });
     },
     onError: (e: Error) => { toast(e.message, 'error'); qc.invalidateQueries({ queryKey: ['settings'] }); },
@@ -54,7 +54,7 @@ export default function WarpSettings() {
   const rotate = useMutation({
     mutationFn: () => api<{ outcome: string; beforeIp?: string; afterIp?: string; retryAfter?: number }>('/api/warp/rotate-ip', { method: 'POST', body: '{}' }),
     onSuccess: result => {
-      const messages: Record<string, string> = { changed: 'IP خروجی تغییر کرد.', unchanged: 'کلادفلر همان IP قبلی را داد؛ تغییری نکرد.', connected: 'WARP وصل شد؛ IP قبلی قابل بررسی نبود.', failed: 'اتصال جدید تأیید نشد؛ وضعیت WARP را بررسی کنید.', busy: 'تلاش دیگری در حال انجام است.', cooldown: `برای تلاش بعدی ${result.retryAfter || 60} ثانیه صبر کنید.` };
+      const messages: Record<string, string> = { changed: 'IP خروجی تغییر کرد.', unchanged: 'سرویس همان IP قبلی را داد؛ تغییری نکرد.', connected: 'مسیر انتخابی وصل شد؛ IP قبلی قابل بررسی نبود.', failed: 'اتصال جدید تأیید نشد؛ وضعیت مسیر انتخابی را بررسی کنید.', busy: 'تلاش دیگری در حال انجام است.', cooldown: `برای تلاش بعدی ${result.retryAfter || 60} ثانیه صبر کنید.` };
       toast(messages[result.outcome] || 'بررسی پایان یافت.', ['changed', 'connected'].includes(result.outcome) ? 'success' : 'info');
       qc.invalidateQueries({ queryKey: ['warp-status'] });
     },
@@ -63,18 +63,20 @@ export default function WarpSettings() {
   if (!form) return <GlassCard>در حال دریافت تنظیمات…</GlassCard>;
   const s = status.data;
   const enabled = settings.data?.settings.warp.enabled ?? false;
+  const selectedInstalled = s?.providers ? s.providers[form.provider || 'warp'] : s?.installed;
+  const providerLabel = settings.data?.settings.warp.provider === 'psiphon' ? 'Psiphon' : 'WARP';
   const states: Record<string, string> = { connected: 'متصل', disabled: 'خاموش', degraded: 'اتصال ناموفق', error: 'خطا', not_ready: 'آماده نیست' };
   const daily = Object.entries(s?.daily || {}).sort(([a], [b]) => b.localeCompare(a)).slice(0, 7);
   return <div className="space-y-5">
     <GlassCard className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3"><Cloud className="text-cyan-400" /><div><h3 className="font-bold text-lg">مسیر انتخابی WARP</h3><p className="text-muted text-xs mt-1">برای اتصال‌های IKEv2 و Xray؛ سایر سایت‌ها مستقیم باز می‌شوند.</p></div></div>
+        <div className="flex items-center gap-3"><Cloud className="text-cyan-400" /><div><h3 className="font-bold text-lg">مسیر گوگل · {providerLabel}</h3><p className="text-muted text-xs mt-1">برای اتصال‌های IKEv2 و Xray؛ سایر سایت‌ها مستقیم باز می‌شوند.</p></div></div>
         <div className="flex flex-wrap items-center gap-3">
           <span className={`badge ${s?.healthy && !s.stale && s.state === 'connected' ? 'badge-ok' : 'badge-warn'}`}>{s?.stale ? 'وضعیت قدیمی' : states[s?.state || 'not_ready'] || s?.state}</span>
           <button className={enabled ? 'btn-ghost text-rose-300' : 'btn-primary'} role="switch" aria-checked={enabled}
-            aria-label={enabled ? 'خاموش کردن WARP' : 'روشن کردن WARP'}
+            aria-label={enabled ? 'خاموش کردن مسیر گوگل' : 'روشن کردن مسیر گوگل'}
             disabled={toggle.isPending || save.isPending || (!s?.installed && !enabled)} onClick={() => toggle.mutate(!enabled)}>
-            <Power size={18} />{toggle.isPending ? 'در حال اعمال…' : enabled ? 'خاموش کردن WARP' : 'روشن کردن WARP'}
+            <Power size={18} />{toggle.isPending ? 'در حال اعمال…' : enabled ? 'خاموش کردن مسیر گوگل' : 'روشن کردن مسیر گوگل'}
           </button>
         </div>
       </div>
@@ -86,15 +88,15 @@ export default function WarpSettings() {
         <span>IP آخرین آزمایش: <b dir="ltr">{s?.exitIp || '—'}</b></span><span>کشور: {s?.country || '—'}</span>
         <span>زمان پاسخ آزمایش: {s?.latencyMs ?? '—'} ms</span><span>سشن IKE مشمول: {s?.activeIkeSessions ?? 0}</span>
       </div>
-      <p className="text-xs text-muted">آخرین بررسی اتصال: {fmtDate(s?.checkedAt)} · آمار ترافیک واقعی عبوری از WARP است و دوباره از سهمیه کاربر کم نمی‌شود. آمار از زمان فعال‌سازی ثبت می‌شود؛ هنگام قطع ناگهانی ممکن است چند ثانیه آخر ثبت نشود.</p>
+      <p className="text-xs text-muted">آخرین بررسی اتصال: {fmtDate(s?.checkedAt)} · آمار ترافیک واقعی عبوری از WARP و Psiphon است و دوباره از سهمیه کاربر کم نمی‌شود. آمار از زمان فعال‌سازی ثبت می‌شود؛ هنگام قطع ناگهانی ممکن است چند ثانیه آخر ثبت نشود.</p>
       {s?.error && <p className="text-sm text-amber-400 break-words" dir="ltr">{s.error}</p>}
       {status.isError && <p className="text-amber-400 text-sm">دریافت وضعیت ناموفق بود؛ دسترسی یا سرویس را بررسی کنید.</p>}
-      {s && !s.installed && <p className="text-amber-400 text-sm">نصب WARP روی این سرور کامل نشده است؛ مدیر سرور باید نصب را دوباره اجرا کند.</p>}
+      {s && !s.installed && <p className="text-amber-400 text-sm">نصب سرویس انتخاب‌شده روی این سرور کامل نشده است؛ مدیر سرور باید نصب را دوباره اجرا کند.</p>}
       <div className="flex flex-wrap gap-3">
         <button className="btn-ghost" disabled={!s?.installed || reconnect.isPending || rotate.isPending} onClick={() => reconnect.mutate()}><RefreshCw size={16} /> اتصال مجدد</button>
         <button className="btn-primary" disabled={!s?.installed || !enabled || rotate.isPending || reconnect.isPending} onClick={() => rotate.mutate()}><RefreshCw size={16} className={rotate.isPending ? 'animate-spin' : ''} />{rotate.isPending ? 'در حال تلاش برای تغییر IP…' : 'تلاش برای تغییر IP'}</button>
       </div>
-      <p className="text-xs text-muted">تغییر IP، WARP را کوتاه قطع‌و‌وصل می‌کند؛ فقط ترافیک سایت‌های مشمول ممکن است موقتاً قطع شود. تغییر IP تضمینی نیست. بین دو تلاش یک دقیقه فاصله است.</p>
+      <p className="text-xs text-muted">تغییر IP، سرویس انتخاب‌شده را کوتاه قطع‌و‌وصل می‌کند؛ فقط ترافیک سایت‌های مشمول ممکن است موقتاً قطع شود. تغییر IP تضمینی نیست. بین دو تلاش یک دقیقه فاصله است.</p>
       {rotate.data && <div className="rounded-xl border border-[var(--line)] p-3 text-sm space-y-2" aria-live="polite">
         <p>{({ changed: 'IP خروجی تغییر کرد', unchanged: 'IP خروجی تغییر نکرد', connected: 'اتصال برقرار شد', failed: 'اتصال جدید تأیید نشد', busy: 'تلاش دیگری در جریان است', cooldown: 'لطفاً کمی صبر کنید' } as Record<string,string>)[rotate.data.outcome]}</p>
         {(rotate.data.beforeIp || rotate.data.afterIp) && <p dir="ltr">{rotate.data.beforeIp || '—'} → {rotate.data.afterIp || '—'}</p>}
@@ -102,12 +104,19 @@ export default function WarpSettings() {
     </GlassCard>
     <GlassCard className="space-y-5">
       <h3 className="font-bold">انتخاب سایت‌ها و کاربران</h3>
+      <label className="block space-y-2"><span className="font-bold text-sm">سرویس خروجی</span>
+        <select className="input w-full" value={form.provider || 'warp'} onChange={e => setForm({ ...form, provider: e.target.value as Policy['provider'] })}>
+          <option value="warp">Cloudflare WARP</option><option value="psiphon">Psiphon — سایفون</option>
+        </select>
+        <span className="block text-xs text-muted">فقط سایت‌های فهرست زیر از این سرویس می‌روند. تغییر سرویس را ذخیره کنید؛ IP جدید هم ممکن است توسط گوگل محدود شود.</span>
+        {s?.providers && s.providers[form.provider || 'warp'] === false && <span className="block text-amber-400 text-xs">این سرویس هنوز نصب نشده؛ ابتدا اسکریپت آپدیت سرور را اجرا کنید.</span>}
+      </label>
       <p className="text-xs text-muted">دکمهٔ روشن/خاموش بالای صفحه همان لحظه اعمال می‌شود و نیازی به ذخیره ندارد. تغییرات این بخش را با دکمهٔ «ذخیره و اعمال تنظیمات» ثبت کنید.</p>
       <div className="grid md:grid-cols-2 gap-5">
         <div className="space-y-2"><label className="block font-bold text-sm" htmlFor="warp-domains">سایت‌های مشمول</label>
           <p className="text-xs text-muted">هر خط یک دامنه، بدون https یا مسیر؛ زیردامنه‌های آن هم شامل می‌شوند.</p>
           <textarea id="warp-domains" className="input w-full min-h-64 font-mono text-xs" dir="ltr" value={domains} onChange={e => setDomains(e.target.value)} />
-          <button className="btn-ghost text-xs" disabled={!presets.data} onClick={() => setDomains([...new Set([...lines(domains), ...(presets.data?.geminiDomains || [])])].join('\n'))}>افزودن مجموعه Gemini، ورود و تأیید گوگل</button>
+          <button className="btn-ghost text-xs" disabled={!presets.data} onClick={() => setDomains((presets.data?.geminiDomains || []).join('\n'))}>فقط Gemini، ورود و تأیید گوگل</button>
           <button className="btn-ghost text-xs" disabled={!presets.data} onClick={() => setDomains([...new Set([...lines(domains), ...(presets.data?.antigravityDomains || [])])].join('\n'))}>افزودن مجموعه Antigravity و API گوگل</button>
         </div>
         <div className="space-y-2"><label className="block font-bold text-sm" htmlFor="warp-excluded">سایت‌های مستثنا</label>
@@ -127,11 +136,11 @@ export default function WarpSettings() {
         </div>}
       </div>
       <div className="grid md:grid-cols-2 gap-5">
-        <label className="space-y-2"><span className="block font-bold text-sm">هنگام قطع WARP</span><select className="input w-full" value={form.failureMode} onChange={e => setForm({ ...form, failureMode: e.target.value as Policy['failureMode'] })}><option value="block">سایت‌های مشمول قطع بمانند</option><option value="direct">موقتاً از اینترنت مستقیم سرور استفاده شود</option></select><span className="block text-xs text-muted">این انتخاب روی سایت‌های دیگر و اتصال SSH اثر ندارد.</span></label>
+        <label className="space-y-2"><span className="block font-bold text-sm">هنگام قطع مسیر انتخابی</span><select className="input w-full" value={form.failureMode} onChange={e => setForm({ ...form, failureMode: e.target.value as Policy['failureMode'] })}><option value="block">سایت‌های مشمول قطع بمانند</option><option value="direct">موقتاً از اینترنت مستقیم سرور استفاده شود</option></select><span className="block text-xs text-muted">این انتخاب روی سایت‌های دیگر و اتصال SSH اثر ندارد.</span></label>
         <label className="space-y-2"><span className="flex gap-2 items-center font-bold text-sm"><input type="checkbox" checked={form.disableQuic} onChange={e => setForm({ ...form, disableQuic: e.target.checked })} /> سازگاری HTTP/3</span><span className="block text-xs text-muted">برای جلوگیری از عبور مستقیم Gemini، در IKEv2 ارتباط UDP/443 کاربران مشمول بسته می‌شود تا مرورگر از TCP استفاده کند. این تغییر ممکن است HTTP/3 سایر سایت‌های همان کاربران را هم به HTTP/2 تبدیل کند. در Xray فقط دامنه‌های مشمول اعمال می‌شود.</span></label>
       </div>
-      <p className="text-xs text-muted">تشخیص دامنه از اتصال رمزگذاری‌شده به SNI وابسته است؛ ECH یا برنامه‌هایی که نام سایت را پنهان می‌کنند ممکن است نیاز به تنظیم کلاینت داشته باشند. IP و کشور WARP قابل انتخاب نیست و دسترسی همیشگی به Gemini تضمین نمی‌شود.</p>
-      <button className="btn-primary" disabled={save.isPending || toggle.isPending || !lines(domains).length || (!s?.installed && form.enabled)} onClick={() => save.mutate()}><Save size={16} />{save.isPending ? 'در حال اعمال…' : 'ذخیره و اعمال تنظیمات'}</button>
+      <p className="text-xs text-muted">تشخیص دامنه از اتصال رمزگذاری‌شده به SNI وابسته است؛ ECH یا برنامه‌هایی که نام سایت را پنهان می‌کنند ممکن است نیاز به تنظیم کلاینت داشته باشند. IP خروجی به سرویس انتخاب‌شده بستگی دارد و دسترسی همیشگی به Gemini تضمین نمی‌شود.</p>
+      <button className="btn-primary" disabled={save.isPending || toggle.isPending || !lines(domains).length || (!selectedInstalled && form.enabled)} onClick={() => save.mutate()}><Save size={16} />{save.isPending ? 'در حال اعمال…' : 'ذخیره و اعمال تنظیمات'}</button>
       <p className="text-xs text-muted">تغییر مسیر روی اتصال‌های جدید سایت‌ها اعمال می‌شود؛ پس از ذخیره، برنامه یا مرورگر را کامل ببندید و باز کنید.</p>
     </GlassCard>
     {daily.length > 0 && <GlassCard className="space-y-3"><h3 className="font-bold">مصرف روزهای اخیر · به وقت تهران</h3>{daily.map(([date, value]) => <div key={date} className="flex justify-between border-b border-[var(--line)] py-2"><span dir="ltr">{date}</span><b dir="ltr">{fmtBytes(value)}</b></div>)}</GlassCard>}

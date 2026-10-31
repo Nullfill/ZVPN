@@ -311,7 +311,7 @@ export default function SettingsPage() {
         {['admin', 'owner'].includes(meData?.user.role || '') && <button className={`nav-item ${activeTab === 'ikeRelay' ? 'active font-bold' : ''}`} onClick={() => setActiveTab('ikeRelay')}><Server size={18} /> مسیر ایران IKEv2</button>}
         {['admin', 'owner'].includes(meData?.user.role || '') && <button className={`nav-item ${activeTab === 'xrayRelay' ? 'active font-bold' : ''}`} onClick={() => setActiveTab('xrayRelay')}><Server size={18} /> مسیر ایران Xray</button>}
         {['admin', 'owner'].includes(meData?.user.role || '') && <button className={`nav-item ${activeTab === 'netlify' ? 'active font-bold' : ''}`} onClick={() => setActiveTab('netlify')}><Server size={18} /> واسط Netlify</button>}
-        {['admin', 'owner'].includes(meData?.user.role || '') && <button className={`nav-item ${activeTab === 'warp' ? 'active font-bold' : ''}`} onClick={() => setActiveTab('warp')}><Shield size={18} /> مسیر WARP</button>}
+        {['admin', 'owner'].includes(meData?.user.role || '') && <button className={`nav-item ${activeTab === 'warp' ? 'active font-bold' : ''}`} onClick={() => setActiveTab('warp')}><Shield size={18} /> مسیر گوگل</button>}
         <button
           className={`nav-item ${activeTab === 'general' ? 'active font-bold' : ''}`}
           onClick={() => setActiveTab('general')}

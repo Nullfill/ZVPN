@@ -11,10 +11,14 @@ UUID = re.compile(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}')
 
 
 def validate(data):
-    if not isinstance(data, dict) or set(data) != {
+    required = {
         'enabled', 'scope', 'users', 'domains', 'excludedDomains', 'failureMode', 'disableQuic'
-    }:
+    }
+    if not isinstance(data, dict) or not required <= set(data) <= required | {'provider'}:
         raise ValueError('Invalid WARP policy fields')
+    data = {**data, 'provider': data.get('provider', 'warp')}
+    if data['provider'] not in ('warp', 'psiphon'):
+        raise ValueError('Invalid routing provider')
     for field in ('enabled', 'disableQuic'):
         if type(data[field]) is not bool:
             raise ValueError('Invalid boolean')
@@ -101,6 +105,6 @@ def gateway_config(policy, healthy=True):
              'settings': {'address': '127.0.0.1'}},
         ],
         'outbounds': [{'tag': 'direct', 'protocol': 'freedom'}, {'tag': 'warp', 'protocol': 'socks',
-                      'settings': {'servers': [{'address': '127.0.0.1', 'port': 40000}]}}],
+                      'settings': {'servers': [{'address': '127.0.0.1', 'port': 40002 if policy.get('provider') == 'psiphon' else 40000}]}}],
         'routing': {'rules': rules},
     }

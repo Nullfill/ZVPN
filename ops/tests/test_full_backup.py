@@ -6,6 +6,25 @@ spec=importlib.util.spec_from_file_location('restore',ROOT/'ops/restore-full-bac
 restore=importlib.util.module_from_spec(spec);spec.loader.exec_module(restore)
 
 class FullBackupTests(unittest.TestCase):
+    def test_enabled_psiphon_requires_its_network_configuration(self):
+        data, _ = self.snapshot()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            restore.safe_extract(data, root)
+            state = root/'warp-policy/warp.json'
+            state.parent.mkdir(parents=True)
+            state.write_text(json.dumps({'enabled': True, 'provider': 'psiphon'}))
+            manifest = json.loads((root/'manifest.json').read_text())
+            manifest['checksums']['warp-policy/warp.json'] = hashlib.sha256(state.read_bytes()).hexdigest()
+            (root/'manifest.json').write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, 'Incomplete Psiphon backup'):
+                restore.verify_snapshot(root)
+            config = root/'warp-policy/psiphon.json'
+            config.write_text('{"LocalSocksProxyPort":40002}')
+            manifest['checksums']['warp-policy/psiphon.json'] = hashlib.sha256(config.read_bytes()).hexdigest()
+            (root/'manifest.json').write_text(json.dumps(manifest))
+            restore.verify_snapshot(root)
+
     def test_enabled_ike_relay_requires_its_original_certificate_and_connection(self):
         data, _ = self.snapshot()
         with tempfile.TemporaryDirectory() as directory:

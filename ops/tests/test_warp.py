@@ -32,7 +32,17 @@ class WarpPolicyTests(unittest.TestCase):
                              ('users', [{'id': '../root', 'username': 'x'}])]:
             data = sample(); data[field] = value
             with self.assertRaises(ValueError): policy.validate(data)
-        self.assertEqual(policy.validate(sample()), sample())
+        self.assertEqual(policy.validate(sample()), {**sample(), 'provider': 'warp'})
+
+    def test_provider_selects_only_fixed_local_proxy_and_preserves_domain_rules(self):
+        for provider, port in [('warp', 40000), ('psiphon', 40002)]:
+            data = policy.validate({**sample(), 'provider': provider})
+            config = policy.gateway_config(data)
+            self.assertEqual(config['outbounds'][1]['settings']['servers'], [{'address': '127.0.0.1', 'port': port}])
+            self.assertEqual(config['routing']['rules'][-1]['domain'], ['domain:gemini.google.com', 'domain:googleapis.com'])
+            self.assertEqual(config['routing']['rules'][1]['outboundTag'], 'direct')
+        for provider in ['shell', '127.0.0.1:22', None]:
+            with self.assertRaises(ValueError): policy.validate({**sample(), 'provider': provider})
 
     def test_selected_users_exclusions_api_and_quota_accounting_are_preserved(self):
         original = core(); applied = policy.main_xray(original, sample())
@@ -63,6 +73,21 @@ class WarpPolicyTests(unittest.TestCase):
 
 @unittest.skipUnless(os.name == 'posix', 'Linux router tests')
 class WarpRouterTests(unittest.TestCase):
+    def setUp(self):
+        patcher = patch.object(self.router, 'read_policy', return_value={'provider': 'warp'})
+        patcher.start(); self.addCleanup(patcher.stop)
+
+    def test_psiphon_rotation_restarts_only_the_selected_proxy(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder, patch.object(self.router, 'STATE', Path(folder)), \
+             patch.object(self.router, 'read_policy', return_value={'provider': 'psiphon'}), \
+             patch.object(self.router, 'atomic', side_effect=lambda p, data: p.write_text(__import__('json').dumps(data))), \
+             patch.object(self.router.time, 'sleep'), patch.object(self.router, 'command') as run, \
+             patch.object(self.router, 'probe', side_effect=[{'healthy': True, 'exitIp': '172.237.1.1'}, {'healthy': True, 'exitIp': '172.237.1.2'}]):
+            self.assertEqual(self.router.rotate_ip()['outcome'], 'changed')
+            self.assertEqual(run.call_args_list[0].args[0], ['systemctl', 'restart', 'zvpn-psiphon.service'])
+            self.assertEqual(len(run.call_args_list), 1)
+
     def test_ip_rotation_reports_change_and_does_not_reset_registration(self):
         import tempfile
         for old, new, expected in [('104.28.1.1', '104.28.1.2', 'changed'), ('104.28.1.1', '104.28.1.1', 'unchanged')]:
