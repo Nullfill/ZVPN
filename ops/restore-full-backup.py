@@ -95,7 +95,11 @@ def restore(root):
     if not dbname or dbname in ('postgres','template0','template1'):
         raise ValueError('Refusing to replace a PostgreSQL system database')
     domain=urlparse(module.env_value(text,'PUBLIC_BASE_URL')).hostname
-    if not shutil.which('node') or not shutil.which('nginx') or not shutil.which('psql') or not pathlib.Path('/usr/local/sbin/zvpn-helper').exists():
+    installed = (pathlib.Path('/usr/local/sbin/zvpn-helper').is_file()
+                 and pathlib.Path('/etc/systemd/system/zvpn-panel.service').is_file()
+                 and (app/'backend/node_modules/pg/package.json').is_file()
+                 and (app/'frontend/dist/index.html').is_file())
+    if not shutil.which('node') or not shutil.which('nginx') or not shutil.which('psql') or not installed:
         env=os.environ.copy();env.update(ZVPN_NON_INTERACTIVE='1',ZVPN_DOMAIN=domain,
             ZVPN_DB_NAME=dbname,ZVPN_DB_USER=username)
         run(['bash',str(app/'install.sh')],env=env)

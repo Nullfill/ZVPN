@@ -55,7 +55,7 @@ python3 "$SOURCE_DIR/ops/configure-xray-nginx.py"
 nginx -t
 systemctl daemon-reload
 systemctl enable xray
-systemctl reload nginx
+systemctl reload-or-restart nginx
 # Provision WARP on fresh installations too. Its routing stays disabled until
 # the administrator enables it; a package/network failure must not take down VPN.
 if ! bash "$SOURCE_DIR/ops/install-warp.sh"; then

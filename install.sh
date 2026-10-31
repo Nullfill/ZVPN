@@ -94,7 +94,13 @@ apt-get update -qq
 apt-get install -y --no-install-recommends \
   postgresql postgresql-client strongswan strongswan-pki strongswan-swanctl strongswan-starter \
   libcharon-extra-plugins libcharon-extauth-plugins libstrongswan-extra-plugins libstrongswan-standard-plugins \
-  nginx rsync openssl curl python3 python3-cryptography certbot python3-certbot-nginx dnsutils >/dev/null
+  nginx rsync openssl curl python3 python3-cryptography certbot python3-certbot-nginx dnsutils sudo >/dev/null
+
+# Ubuntu 26.04 defaults to sudo-rs, which rejects the helper's scoped argument
+# globs. Use Ubuntu's classic sudo provider without widening the sudoers rules.
+if sudo --version 2>/dev/null | head -n 1 | grep -q '^sudo-rs ' && command -v sudo.ws >/dev/null; then
+  update-alternatives --set sudo "$(command -v sudo.ws)"
+fi
 
 # 4. Ensure Node.js 20+
 if ! command -v node >/dev/null || [[ "$(node -v 2>/dev/null | cut -d. -f1 | tr -d 'v')" -lt 20 ]]; then
