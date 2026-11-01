@@ -113,7 +113,9 @@ def gateway_config(policy, healthy=True, warp_healthy=True):
                    'levels': {'0': {'connIdle': 600}}},
         'inbounds': [
             {'tag': 'ike-web', 'listen': '0.0.0.0', 'port': 10087, 'protocol': 'dokodemo-door',
-             'settings': {'network': 'tcp', 'followRedirect': True}, 'sniffing': sniffing(),
+             # IKE provides only an IP, unlike domain-based VLESS requests.
+             # Recover the TLS/HTTP hostname for upstream DNS and egress parity.
+             'settings': {'network': 'tcp', 'followRedirect': True}, 'sniffing': {**sniffing(), 'routeOnly': False},
              'streamSettings': {'sockopt': {'tproxy': 'redirect'}}},
             {'tag': 'xray-web', 'listen': '127.0.0.1', 'port': 40001, 'protocol': 'socks',
              'settings': {'auth': 'noauth', 'udp': False}, 'sniffing': sniffing()},

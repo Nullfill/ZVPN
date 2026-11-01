@@ -86,6 +86,18 @@ class WarpPolicyTests(unittest.TestCase):
         self.assertEqual(policy.gateway_config(data, healthy=False)['routing']['rules'][-1]['outboundTag'], 'direct')
         self.assertEqual(config['outbounds'][0]['tag'], 'direct')
 
+    def test_ike_recovers_hostname_for_upstream_while_vless_keeps_destination(self):
+        data = policy.validate(sample())
+        gateway = policy.gateway_config(data)
+        ike = next(i for i in gateway['inbounds'] if i['tag'] == 'ike-web')
+        self.assertFalse(ike['sniffing']['routeOnly'])
+        self.assertEqual(ike['sniffing']['destOverride'], ['http', 'tls', 'quic'])
+        self.assertTrue(ike['settings']['followRedirect'])
+        socks = next(i for i in gateway['inbounds'] if i['tag'] == 'xray-web')
+        self.assertTrue(socks['sniffing']['routeOnly'])
+        self.assertEqual(gateway['routing']['rules'][1]['outboundTag'], 'direct')
+        self.assertEqual(gateway['routing']['rules'][-1]['outboundTag'], 'warp')
+
 
 @unittest.skipUnless(os.name == 'posix', 'Linux router tests')
 class WarpRouterTests(unittest.TestCase):

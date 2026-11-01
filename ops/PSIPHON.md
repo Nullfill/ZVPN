@@ -5,6 +5,12 @@ domain and account filters apply to IKE and all Xray inbounds. User quota remain
 in the existing collectors; gateway traffic is an additional observation, not a
 second debit. The displayed gateway totals include both providers' history.
 
+The transparent IKE web inbound recovers HTTP/TLS hostnames before connecting
+upstream. This avoids carrying client DNS IPs into the selected proxy, where
+they can select a different address family or destination than domain-based
+VLESS. Domain exclusions still select the direct outbound; traffic without a
+recoverable hostname retains its original destination.
+
 When using Psiphon, `antigravityViaWarp` optionally keeps the specific Antigravity
 streaming API domains on WARP. An idle HTTPS comparison on the deployed network
 kept the same socket open through WARP and direct routing after 45 seconds;

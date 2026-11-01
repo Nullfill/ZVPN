@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## 3.4.2 - 2026-11-01
+
+- Recover HTTP/TLS hostnames on the transparent IKE web gateway before connecting to the selected proxy, instead of retaining client-resolved IP addresses.
+- Preserve account selection, domain exclusions, provider choice and shared traffic accounting.
+
 ## 3.4.1 - 2026-11-01
 
 - Add an opt-in WARP route for Antigravity streaming APIs while Gemini stays on Psiphon.
