@@ -57,6 +57,7 @@ const SETTINGS_SCHEMAS = {
   warp: z.object({
     enabled: z.boolean().optional(),
     provider: z.enum(['warp', 'psiphon']).optional(),
+    antigravityViaWarp: z.boolean().optional(),
     scope: z.enum(['all', 'selected']).optional(),
     userIds: z.array(z.string().uuid()).max(10000).optional(),
     domains: z.array(z.string().trim().toLowerCase().max(253)

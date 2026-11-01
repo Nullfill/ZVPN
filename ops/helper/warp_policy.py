@@ -8,18 +8,26 @@ from pathlib import Path
 POLICY = Path('/etc/zvpn/warp.json')
 DOMAIN = re.compile(r'(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62}')
 UUID = re.compile(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}')
+ANTIGRAVITY_STREAM_DOMAINS = [
+    'daily-cloudcode-pa.googleapis.com', 'cloudcode-pa.googleapis.com',
+    'cloudaicompanion.googleapis.com', 'jetski-webchannel.googleapis.com',
+]
+
+
+def separate_antigravity(policy):
+    return policy.get('provider') == 'psiphon' and policy.get('antigravityViaWarp', False)
 
 
 def validate(data):
     required = {
         'enabled', 'scope', 'users', 'domains', 'excludedDomains', 'failureMode', 'disableQuic'
     }
-    if not isinstance(data, dict) or not required <= set(data) <= required | {'provider'}:
+    if not isinstance(data, dict) or not required <= set(data) <= required | {'provider', 'antigravityViaWarp'}:
         raise ValueError('Invalid WARP policy fields')
-    data = {**data, 'provider': data.get('provider', 'warp')}
+    data = {**data, 'provider': data.get('provider', 'warp'), 'antigravityViaWarp': data.get('antigravityViaWarp', False)}
     if data['provider'] not in ('warp', 'psiphon'):
         raise ValueError('Invalid routing provider')
-    for field in ('enabled', 'disableQuic'):
+    for field in ('enabled', 'disableQuic', 'antigravityViaWarp'):
         if type(data[field]) is not bool:
             raise ValueError('Invalid boolean')
     if data['scope'] not in ('all', 'selected') or data['failureMode'] not in ('block', 'direct'):
@@ -79,22 +87,30 @@ def main_xray(config, policy):
     rules = data['routing']['rules']
     if policy['excludedDomains']:
         rules.append({'type': 'field', **user, 'domain': ['domain:' + d for d in policy['excludedDomains']], 'outboundTag': 'direct'})
-    domain = ['domain:' + d for d in policy['domains']]
+    domains = policy['domains'] + (ANTIGRAVITY_STREAM_DOMAINS if separate_antigravity(policy) else [])
+    domain = ['domain:' + d for d in dict.fromkeys(domains)]
     if policy['disableQuic']:
         rules.append({'type': 'field', **user, 'domain': domain, 'network': 'udp', 'port': '443', 'outboundTag': 'zvpn-warp-quic'})
     rules.append({'type': 'field', **user, 'domain': domain, 'network': 'tcp', 'outboundTag': 'zvpn-warp-router'})
     return data
 
 
-def gateway_config(policy, healthy=True):
+def gateway_config(policy, healthy=True, warp_healthy=True):
     target = 'warp' if healthy or policy['failureMode'] == 'block' else 'direct'
     rules = [{'type': 'field', 'inboundTag': ['api-in'], 'outboundTag': 'api'}]
     if policy['excludedDomains']:
         rules.append({'type': 'field', 'domain': ['domain:' + d for d in policy['excludedDomains']], 'outboundTag': 'direct'})
+    extra_outbounds = []
+    if separate_antigravity(policy):
+        extra_outbounds.append({'tag': 'antigravity-warp', 'protocol': 'socks', 'settings': {
+            'servers': [{'address': '127.0.0.1', 'port': 40000}]}})
+        rules.append({'type': 'field', 'domain': ['domain:' + d for d in ANTIGRAVITY_STREAM_DOMAINS],
+                      'outboundTag': 'antigravity-warp' if warp_healthy or policy['failureMode'] == 'block' else 'direct'})
     rules.append({'type': 'field', 'domain': ['domain:' + d for d in policy['domains']], 'outboundTag': target})
     return {
         'log': {'loglevel': 'warning'}, 'api': {'tag': 'api', 'services': ['StatsService']}, 'stats': {},
-        'policy': {'system': {'statsOutboundUplink': True, 'statsOutboundDownlink': True}},
+        'policy': {'system': {'statsOutboundUplink': True, 'statsOutboundDownlink': True},
+                   'levels': {'0': {'connIdle': 600}}},
         'inbounds': [
             {'tag': 'ike-web', 'listen': '0.0.0.0', 'port': 10087, 'protocol': 'dokodemo-door',
              'settings': {'network': 'tcp', 'followRedirect': True}, 'sniffing': sniffing(),
@@ -105,6 +121,6 @@ def gateway_config(policy, healthy=True):
              'settings': {'address': '127.0.0.1'}},
         ],
         'outbounds': [{'tag': 'direct', 'protocol': 'freedom'}, {'tag': 'warp', 'protocol': 'socks',
-                      'settings': {'servers': [{'address': '127.0.0.1', 'port': 40002 if policy.get('provider') == 'psiphon' else 40000}]}}],
+                      'settings': {'servers': [{'address': '127.0.0.1', 'port': 40002 if policy.get('provider') == 'psiphon' else 40000}]}}] + extra_outbounds,
         'routing': {'rules': rules},
     }

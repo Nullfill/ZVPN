@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## 3.4.1 - 2026-11-01
+
+- Add an opt-in WARP route for Antigravity streaming APIs while Gemini stays on Psiphon.
+- Preserve domain exclusions, selected-account rules, shared quota and aggregate gateway statistics.
+- Probe the separate API route and display its health and exit IP in settings.
+- Allow ten minutes of idle time in the local gateway; upstream Psiphon idle limits remain outside the panel's control.
+
 ## 3.4.0 - 2026-10-31
 
 - Add Psiphon as an optional provider in the existing selective Google router.

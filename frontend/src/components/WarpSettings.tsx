@@ -6,12 +6,12 @@ import { fmtBytes, fmtDate } from '../lib/format';
 import { GlassCard } from './UI';
 import { useToast } from './Toast';
 
-type Policy = { provider: 'warp' | 'psiphon'; enabled: boolean; scope: 'all' | 'selected'; userIds: string[]; domains: string[];
+type Policy = { provider: 'warp' | 'psiphon'; antigravityViaWarp: boolean; enabled: boolean; scope: 'all' | 'selected'; userIds: string[]; domains: string[];
   excludedDomains: string[]; failureMode: 'block' | 'direct'; disableQuic: boolean };
 type Status = { provider?: 'warp' | 'psiphon'; providers?: Record<string, boolean>; installed: boolean; state: string; healthy?: boolean; stale: boolean; totalBytes: number;
   todayBytes: number; uplinkBytes?: number; downlinkBytes?: number; country?: string; exitIp?: string;
   latencyMs?: number; updatedAt?: string; checkedAt?: string; activeIkeSessions?: number; error?: string;
-  daily?: Record<string, number> };
+  antigravity?: { healthy: boolean; exitIp?: string; error?: string }; daily?: Record<string, number> };
 const lines = (value: string) => [...new Set(value.split(/[\s,،]+/).map(x => x.trim().toLowerCase()).filter(Boolean))];
 
 export default function WarpSettings() {
@@ -87,6 +87,8 @@ export default function WarpSettings() {
       <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted">
         <span>IP آخرین آزمایش: <b dir="ltr">{s?.exitIp || '—'}</b></span><span>کشور: {s?.country || '—'}</span>
         <span>زمان پاسخ آزمایش: {s?.latencyMs ?? '—'} ms</span><span>سشن IKE مشمول: {s?.activeIkeSessions ?? 0}</span>
+        {enabled && settings.data?.settings.warp.provider === 'psiphon' && settings.data?.settings.warp.antigravityViaWarp &&
+          <span>مسیر آنتی‌گرویتی: WARP · {s?.antigravity?.healthy ? <b dir="ltr">{s.antigravity.exitIp}</b> : 'در حال بررسی اتصال'}</span>}
       </div>
       <p className="text-xs text-muted">آخرین بررسی اتصال: {fmtDate(s?.checkedAt)} · آمار ترافیک واقعی عبوری از WARP و Psiphon است و دوباره از سهمیه کاربر کم نمی‌شود. آمار از زمان فعال‌سازی ثبت می‌شود؛ هنگام قطع ناگهانی ممکن است چند ثانیه آخر ثبت نشود.</p>
       {s?.error && <p className="text-sm text-amber-400 break-words" dir="ltr">{s.error}</p>}
@@ -111,6 +113,11 @@ export default function WarpSettings() {
         <span className="block text-xs text-muted">فقط سایت‌های فهرست زیر از این سرویس می‌روند. تغییر سرویس را ذخیره کنید؛ IP جدید هم ممکن است توسط گوگل محدود شود.</span>
         {s?.providers && s.providers[form.provider || 'warp'] === false && <span className="block text-amber-400 text-xs">این سرویس هنوز نصب نشده؛ ابتدا اسکریپت آپدیت سرور را اجرا کنید.</span>}
       </label>
+      {form.provider === 'psiphon' && <label className="block rounded-xl border border-[var(--line)] p-4 space-y-2">
+        <span className="flex items-center gap-2 font-bold text-sm"><input type="checkbox" checked={form.antigravityViaWarp || false}
+          onChange={e => setForm({ ...form, antigravityViaWarp: e.target.checked })} /> پایداری آنتی‌گرویتی با WARP</span>
+        <span className="block text-xs text-muted">API آنتی‌گرویتی برای فکرکردن و پاسخ‌های طولانی از WARP می‌رود؛ Gemini و سایر سایت‌های مشمول روی سایفون می‌مانند. سایفون ممکن است اتصال بدون تبادل داده را زود ببندد. سایت‌های مستثنا همچنان اولویت دارند.</span>
+      </label>}
       <p className="text-xs text-muted">دکمهٔ روشن/خاموش بالای صفحه همان لحظه اعمال می‌شود و نیازی به ذخیره ندارد. تغییرات این بخش را با دکمهٔ «ذخیره و اعمال تنظیمات» ثبت کنید.</p>
       <div className="grid md:grid-cols-2 gap-5">
         <div className="space-y-2"><label className="block font-bold text-sm" htmlFor="warp-domains">سایت‌های مشمول</label>

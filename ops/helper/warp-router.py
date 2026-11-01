@@ -14,7 +14,7 @@ import shlex
 import subprocess
 import time
 from zoneinfo import ZoneInfo
-from warp_policy import POLICY, read_policy, validate, gateway_config
+from warp_policy import POLICY, read_policy, validate, gateway_config, separate_antigravity
 
 STATE = Path('/var/lib/zvpn-panel/warp')
 RUNTIME = Path('/run/zvpn-warp')
@@ -156,12 +156,12 @@ def add_counters(state, stats, epoch, day):
 
 
 def read_counters():
-    result = command(['/usr/local/bin/xray', 'api', 'statsquery', '--server=127.0.0.1:10089', '-pattern', 'outbound>>>warp>>>traffic>>>'], timeout=5)
+    result = command(['/usr/local/bin/xray', 'api', 'statsquery', '--server=127.0.0.1:10089', '-pattern', 'outbound>>>'], timeout=5)
     stats = {'uplink': 0, 'downlink': 0}
     for item in json.loads(result.stdout).get('stat', []):
-        match = re.fullmatch(r'outbound>>>warp>>>traffic>>>(uplink|downlink)', item['name'])
+        match = re.fullmatch(r'outbound>>>(?:warp|antigravity-warp)>>>traffic>>>(uplink|downlink)', item['name'])
         if match:
-            stats[match.group(1)] = int(item.get('value', 0))
+            stats[match.group(1)] += int(item.get('value', 0))
     return stats
 
 
@@ -268,12 +268,17 @@ def daemon():
                 policy = read_policy()
                 enabled = bool(policy and policy['enabled'])
                 provider = (policy or {}).get('provider', 'warp')
-                if enabled and (time.monotonic() - last_probe > 30 or health.get('provider') != provider) and not rotating():
+                split = bool(policy and separate_antigravity(policy))
+                if enabled and (time.monotonic() - last_probe > 30 or health.get('provider') != provider
+                                or split != bool(health.get('antigravity'))) and not rotating():
                     connect_provider(provider)
                     health = probe(provider); last_probe = time.monotonic()
                     if not health['healthy']:
                         connect_provider(provider)
-                desired = gateway_config(policy, health['healthy']) if enabled else None
+                    if split:
+                        connect_provider('warp')
+                        health['antigravity'] = probe('warp')
+                desired = gateway_config(policy, health['healthy'], health.get('antigravity', {}).get('healthy', False)) if enabled else None
                 if desired != old_config or (enabled and (not child or child.poll() is not None)):
                     # Drain WARP counters before restarting this sidecar. Shared user
                     # quotas remain in the original IKE/Xray collectors throughout.

@@ -5,6 +5,13 @@ domain and account filters apply to IKE and all Xray inbounds. User quota remain
 in the existing collectors; gateway traffic is an additional observation, not a
 second debit. The displayed gateway totals include both providers' history.
 
+When using Psiphon, `antigravityViaWarp` optionally keeps the specific Antigravity
+streaming API domains on WARP. An idle HTTPS comparison on the deployed network
+kept the same socket open through WARP and direct routing after 45 seconds;
+Psiphon closed it. This can interrupt model thinking without dropping the main
+tunnel. The upstream server controls that idle policy. Domain exclusions still
+take priority, and the normal shared user balance accounts for either path.
+
 The Linux x86_64 ConsoleClient is downloaded from the official
 [Psiphon-Labs binaries repository](https://github.com/Psiphon-Labs/psiphon-tunnel-core-binaries),
 pinned to commit `e02a99daa375567d2df20740bb3d4673eaec11fe` and SHA-256

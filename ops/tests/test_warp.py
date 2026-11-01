@@ -32,7 +32,23 @@ class WarpPolicyTests(unittest.TestCase):
                              ('users', [{'id': '../root', 'username': 'x'}])]:
             data = sample(); data[field] = value
             with self.assertRaises(ValueError): policy.validate(data)
-        self.assertEqual(policy.validate(sample()), {**sample(), 'provider': 'warp'})
+        self.assertEqual(policy.validate(sample()), {**sample(), 'provider': 'warp', 'antigravityViaWarp': False})
+
+    def test_antigravity_stream_override_respects_exclusions_scope_and_failure_policy(self):
+        data = policy.validate({**sample(), 'provider': 'psiphon', 'antigravityViaWarp': True,
+                                'domains': ['gemini.google.com'], 'excludedDomains': ['cloudcode-pa.googleapis.com']})
+        config = policy.gateway_config(data)
+        self.assertEqual(config['routing']['rules'][1]['outboundTag'], 'direct')
+        self.assertEqual(config['routing']['rules'][2]['outboundTag'], 'antigravity-warp')
+        self.assertEqual(config['routing']['rules'][3]['outboundTag'], 'warp')
+        self.assertEqual(config['outbounds'][-1]['settings']['servers'][0]['port'], 40000)
+        applied = policy.main_xray(core(), data)
+        self.assertIn('domain:daily-cloudcode-pa.googleapis.com', applied['routing']['rules'][-1]['domain'])
+        self.assertEqual(len(applied['routing']['rules'][-1]['user']), 3)
+        data['failureMode'] = 'direct'
+        self.assertEqual(policy.gateway_config(data, warp_healthy=False)['routing']['rules'][2]['outboundTag'], 'direct')
+        data['antigravityViaWarp'] = 'yes'
+        with self.assertRaises(ValueError): policy.validate(data)
 
     def test_provider_selects_only_fixed_local_proxy_and_preserves_domain_rules(self):
         for provider, port in [('warp', 40000), ('psiphon', 40002)]:
@@ -139,6 +155,11 @@ class WarpRouterTests(unittest.TestCase):
     def test_protobuf_zero_counter_may_omit_value_field(self):
         with patch.object(self.router, 'command', return_value=SimpleNamespace(stdout='{"stat":[{"name":"outbound>>>warp>>>traffic>>>uplink"}]}')):
             self.assertEqual(self.router.read_counters(), {'uplink': 0, 'downlink': 0})
+
+    def test_both_provider_counters_are_summed_without_counting_direct_traffic(self):
+        stats = '{"stat":[{"name":"outbound>>>warp>>>traffic>>>uplink","value":10},{"name":"outbound>>>antigravity-warp>>>traffic>>>uplink","value":7},{"name":"outbound>>>direct>>>traffic>>>uplink","value":1000}]}'
+        with patch.object(self.router, 'command', return_value=SimpleNamespace(stdout=stats)):
+            self.assertEqual(self.router.read_counters(), {'uplink': 17, 'downlink': 0})
 
 
 if __name__ == '__main__': unittest.main()
