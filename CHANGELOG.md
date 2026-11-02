@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## 3.4.3 - 2026-11-02
+
+- Route Google companion and challenge endpoints with Gemini/Antigravity to avoid mixed direct/proxy egress during sign-in and checks.
+- Migrate unchanged Gemini presets while preserving custom domain lists and explicit exclusions.
+
 ## 3.4.2 - 2026-11-01
 
 - Recover HTTP/TLS hostnames on the transparent IKE web gateway before connecting to the selected proxy, instead of retaining client-resolved IP addresses.

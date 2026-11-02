@@ -20,7 +20,8 @@ test('WARP settings accept explicit domains and user scope but reject executable
 });
 
 test('Gemini preset routes the Google verification page and CAPTCHA along with sign-in', () => {
-  for (const domain of ['gemini.google.com', 'accounts.google.com', 'www.google.com', 'recaptcha.net', 'gstatic.com']) {
+  for (const domain of ['gemini.google.com', 'accounts.google.com', 'www.google.com', 'recaptcha.net', 'gstatic.com',
+    'clients4.google.com', 'clients6.google.com', 'play.google.com', 'safebrowsing.google.com']) {
     assert.ok(GEMINI_DOMAINS.includes(domain), domain);
   }
   // Keep the broad Google parent domain out: selecting Gemini should not
@@ -31,7 +32,7 @@ test('Gemini preset routes the Google verification page and CAPTCHA along with s
 
 test('Antigravity preset covers desktop API and sign-in without changing Gemini defaults', () => {
   for (const domain of ['daily-cloudcode-pa.googleapis.com', 'cloudcode-pa.googleapis.com',
-    'generativelanguage.googleapis.com', 'antigravity.google', 'accounts.google.com']) {
+    'generativelanguage.googleapis.com', 'antigravity.google', 'accounts.google.com', 'clients6.google.com']) {
     assert.ok(ANTIGRAVITY_DOMAINS.includes(domain), domain);
   }
   assert.equal(validateSettingsPatch('warp', { domains: ANTIGRAVITY_DOMAINS }).success, true);
