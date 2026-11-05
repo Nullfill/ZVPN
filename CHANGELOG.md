@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## 3.5.2 - 2026-11-05
+
+- Reuse HTTP/2 transports and pin the selected Firefox endpoint instead of changing egress unnecessarily for each CONNECT stream.
+- Add an optional Muse sign-in preset; existing Muse policies gain the observed Meta/Facebook companions while respecting exclusions.
+- Account logout, country change and reconnect clear the pool; application requests are not replayed.
+- These routing fixes do not grant Muse account eligibility or override Meta checkpoints.
+
 ## 3.5.1 - 2026-11-05
 
 - Show the full Firefox location catalog instead of filtering countries by the browser UI `locked` flag. Authenticated Austria and Netherlands egress were verified.

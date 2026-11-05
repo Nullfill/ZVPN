@@ -33,7 +33,7 @@ import { subscriptionInfo, subscriptionLinks } from './services/subscription.js'
 import { getXrayStatus } from './services/xray.js';
 import { getWarpStatus, reconnectWarp, rotateWarpIp } from './services/warp.js';
 import { firefoxControl } from './services/firefox.js';
-import { GEMINI_DOMAINS, ANTIGRAVITY_DOMAINS } from './services/warpDefaults.js';
+import { GEMINI_DOMAINS, ANTIGRAVITY_DOMAINS, MUSE_DOMAINS } from './services/warpDefaults.js';
 import { listUsers, getUserById, provisionUser, updateUser, extendUser, addTraffic, deleteUser, regenerateToken, revokeToken, getUserStats, downloadLinks, bulkUsers, resetActivation, resetUserPassword } from './services/users.js';
 import { getSettings, updateSettings, validateSettingsPatch, getSetting } from './services/settings.js';
 import { runGithubBackupNow, testGithubConnection, createGithubRepo, listGithubBackups, scheduleGithubBackup } from './services/githubBackup.js';
@@ -350,7 +350,7 @@ app.post('/api/firefox/:operation', requireAdmin, adminOnly, asyncHandler(async 
     res.json(result);
   } catch(e) {res.status(400).json({error:e.message,message:e.message});}
 }));
-app.get('/api/warp/presets', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json({ geminiDomains: GEMINI_DOMAINS, antigravityDomains: ANTIGRAVITY_DOMAINS })));
+app.get('/api/warp/presets', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json({ geminiDomains: GEMINI_DOMAINS, antigravityDomains: ANTIGRAVITY_DOMAINS, museDomains: MUSE_DOMAINS })));
 app.get('/api/warp/users', requireAdmin, adminOnly, asyncHandler(async (_req, res) =>
   res.json({ users: await many('SELECT id, username FROM vpn_users ORDER BY username') })));
 app.post('/api/warp/reconnect', requireAdmin, adminOnly, asyncHandler(async (req, res) => {

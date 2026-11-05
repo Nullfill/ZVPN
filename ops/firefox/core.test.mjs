@@ -7,7 +7,7 @@ import path from 'node:path';
 import http2 from 'node:http2';
 import { execFileSync } from 'node:child_process';
 import {once} from 'node:events';
-import {loginAttempt,callbackCode,REDIRECT,seal,unseal,locations,quota,authority,connectTunnel} from './core.mjs';
+import {loginAttempt,callbackCode,REDIRECT,seal,unseal,locations,quota,authority,connectTunnel,TunnelPool} from './core.mjs';
 
 test('PKCE callback binds administrator, redirect, state and lifetime',()=>{
   const a=loginAttempt('admin-a'),b=loginAttempt('admin-b');const u=new URL(a.url);
@@ -54,7 +54,8 @@ test('TLS HTTP/2 CONNECT supports bidirectional flow and rejects denial without 
         '-addext','subjectAltName=DNS:localhost','-keyout',keyFile,'-out',certFile],{stdio:'ignore'});
       const cert=await fs.readFile(certFile);
       server=http2.createSecureServer({key:await fs.readFile(keyFile),cert});
-      server.on('session',s=>{sessions.add(s);s.on('close',()=>sessions.delete(s));s.on('error',()=>{});});
+      let connections=0;
+      server.on('session',s=>{connections++;sessions.add(s);s.on('close',()=>sessions.delete(s));s.on('error',()=>{});});
       let requests=0;
       server.on('stream',(s,h)=>{
         requests++;s.on('error',()=>{});
@@ -72,6 +73,18 @@ test('TLS HTTP/2 CONNECT supports bidirectional flow and rejects denial without 
       assert.equal(Buffer.concat(chunks).length,256*1024);
       await assert.rejects(connectTunnel(target,'unit-token','denied.example',443,opts),/ACCOUNT_NOT_ELIGIBLE/);
       assert.equal(requests,2);
+      const pool=new TunnelPool(),before=connections;
+      try {
+        for(let i=0;i<2;i++){
+          const s=await pool.open(target,'unit-token','destination.example',443,opts);
+          s.on('data',()=>{});const end=once(s,'end');s.end('same-transport');await end;
+        }
+        assert.equal(connections-before,1,'separate CONNECT streams must share a TLS/HTTP2 transport');
+        pool.close();
+        const s=await pool.open(target,'unit-token','destination.example',443,opts);
+        s.on('data',()=>{});const end=once(s,'end');s.end('new-account-transport');await end;
+        assert.equal(connections-before,2,'clearing the account pool must establish a new transport');
+      }finally{pool.close();}
     }finally{
       for(const s of sessions)s.destroy();if(server)await new Promise(resolve=>server.close(resolve));
       await fs.rm(dir,{recursive:true,force:true});

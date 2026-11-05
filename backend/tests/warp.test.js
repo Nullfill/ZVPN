@@ -4,7 +4,7 @@ process.env.DATABASE_URL ||= 'postgres://localhost/zvpn_test';
 process.env.JWT_SECRET ||= 'test-jwt-secret-test-jwt-secret-test-jwt-secret';
 process.env.MASTER_KEY ||= 'test-master-key-test-master-key-test-master-key';
 const { validateSettingsPatch } = await import('../src/services/settings.js');
-import { WARP_DEFAULTS, GEMINI_DOMAINS, ANTIGRAVITY_DOMAINS } from '../src/services/warpDefaults.js';
+import { WARP_DEFAULTS, GEMINI_DOMAINS, ANTIGRAVITY_DOMAINS, MUSE_DOMAINS } from '../src/services/warpDefaults.js';
 
 test('WARP settings accept explicit domains and user scope but reject executable/routing input', () => {
   assert.equal(validateSettingsPatch('warp', WARP_DEFAULTS).success, true);
@@ -38,4 +38,9 @@ test('Antigravity preset covers desktop API and sign-in without changing Gemini 
   }
   assert.equal(validateSettingsPatch('warp', { domains: ANTIGRAVITY_DOMAINS }).success, true);
   assert.equal(GEMINI_DOMAINS.includes('antigravity.google'), false);
+});
+test('Muse companions are opt-in and do not expand the default Google policy',()=>{
+  for(const d of ['muse.ai','auth.meta.com','www.facebook.com','static.xx.fbcdn.net'])assert.ok(MUSE_DOMAINS.includes(d));
+  assert.equal(validateSettingsPatch('warp',{domains:MUSE_DOMAINS}).success,true);
+  assert.equal(GEMINI_DOMAINS.includes('muse.ai'),false);
 });

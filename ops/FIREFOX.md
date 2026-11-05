@@ -66,6 +66,18 @@ if required. Encrypted historical backups retain the account until removed.
 
 ## Verification
 
+CONNECT streams share a verified HTTP/2 transport and a selected endpoint until
+it disconnects or the administrator changes country, reconnects or logs out.
+This avoids needless egress changes between requests; it does not promise a
+permanent IP, or identical IPv4 and IPv6 addresses. Failed application requests
+are never replayed automatically.
+
+The optional Muse preset includes its observed Meta/Facebook sign-in hosts.
+Adding it also routes ordinary visits to `www.facebook.com` through the selected
+provider. Existing policies that already include Muse receive these companions
+on upgrade, respecting explicit exclusions. Account eligibility and Meta
+checkpoints remain controlled by the destination service.
+
 `node --test ops/firefox/core.test.mjs` covers PKCE/state, redirect/owner/expiry,
 encrypted-store tampering, catalog endpoint restrictions, unknown quota, verified TLS
 HTTP/2 CONNECT, bidirectional payload and denial without destination replay.

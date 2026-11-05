@@ -28,3 +28,5 @@ export const WARP_DEFAULTS = {
   enabled: false, provider: 'warp', antigravityViaWarp: false, scope: 'all', userIds: [], domains: GEMINI_DOMAINS,
   excludedDomains: [], failureMode: 'block', disableQuic: true,
 };
+// Observed Muse sign-in chain. Keep optional: www.facebook.com includes ordinary Facebook visits too.
+export const MUSE_DOMAINS = ['muse.ai', 'auth.meta.com', 'www.facebook.com', 'static.xx.fbcdn.net'];

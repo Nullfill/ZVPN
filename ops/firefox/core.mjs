@@ -121,3 +121,52 @@ export function connectTunnel(server,token,host,port,options={}) {
     });
   });
 }
+
+// Reuse one authenticated HTTP/2 transport per endpoint. Fastly egress can change
+// with each new transport; multiplexing avoids needless identity changes mid-login.
+export class TunnelPool {
+  entries=new Map();
+  all=new Set();
+  async open(server,token,host,port,options={}) {
+    const target=authority(host,port),key=server.hostname+':'+server.port;
+    let e=this.entries.get(key);
+    if(!e || !e.usable || e.session.destroyed || e.session.closed){
+      const session=http2.connect(`https://${server.hostname}:${server.port}`,options);
+      e={session,usable:true,streams:new Set(),ready:null};this.entries.set(key,e);this.all.add(e);
+      const entry=e;
+      session.on('error',()=>{entry.usable=false;});
+      session.on('close',()=>{entry.usable=false;this.all.delete(entry);if(this.entries.get(key)===entry)this.entries.delete(key);});
+      session.on('goaway',()=>{entry.usable=false;if(!entry.streams.size)session.close();});
+      e.ready=new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>{session.destroy();reject(Error('TUNNEL_CONNECT_TIMEOUT'));},15000);
+        session.once('connect',()=>{clearTimeout(timer);resolve();});
+        session.once('error',()=>{clearTimeout(timer);reject(Error('TUNNEL_NETWORK_ERROR'));});
+        session.once('close',()=>{clearTimeout(timer);reject(Error('TUNNEL_CLOSED'));});
+      });
+    }
+    await e.ready;
+    if(!e.usable || e.session.destroyed || e.session.closed)throw Error('TUNNEL_CLOSED');
+    const limit=Math.min(64,e.session.remoteSettings.maxConcurrentStreams ?? 64);
+    if(e.streams.size>=limit)throw Error('TUNNEL_BUSY');
+    const entry=e;
+    return new Promise((resolve,reject)=>{
+      let stream,ready=false;
+      try {stream=entry.session.request({':method':'CONNECT',':authority':target,'proxy-authorization':'Bearer '+token},{endStream:false});}
+      catch {reject(Error('TUNNEL_STREAM_ERROR'));return;}
+      entry.streams.add(stream);
+      const timer=setTimeout(()=>{reject(Error('CONNECT_TIMEOUT'));stream.destroy();},15000);
+      stream.on('error',()=>{if(!ready)reject(Error('TUNNEL_STREAM_ERROR'));});
+      stream.once('response',headers=>{
+        clearTimeout(timer);
+        if(headers[':status']!==200){reject(Error(serviceError(headers[':status'],'proxy')));stream.destroy();return;}
+        ready=true;stream.setTimeout(600000,()=>stream.destroy());resolve(stream);
+      });
+      stream.once('close',()=>{
+        clearTimeout(timer);entry.streams.delete(stream);
+        if(!ready)reject(Error('TUNNEL_CLOSED'));
+        if(!entry.usable && !entry.streams.size)entry.session.close();
+      });
+    });
+  }
+  close(){for(const e of this.all){e.usable=false;e.session.destroy();}this.entries.clear();this.all.clear();}
+}

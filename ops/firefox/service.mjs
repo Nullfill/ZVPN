@@ -3,7 +3,7 @@ import net from 'node:net';
 import http from 'node:http';
 import tls from 'node:tls';
 import {CLIENT_ID, REDIRECT, GUARDIAN, CATALOG, loginAttempt, callbackCode, seal, unseal,
-  locations, quota, api, serviceError, connectTunnel} from './core.mjs';
+  locations, quota, api, serviceError, TunnelPool} from './core.mjs';
 
 const DIR='/var/lib/zvpn-panel/firefox', SOCKET='/run/zvpn-firefox/control.sock';
 const key=await fs.readFile('/etc/zvpn/firefox.key');
@@ -12,6 +12,7 @@ let saved={country:'REC'},pending=null,proxy=null,refreshJob=null,oauthJob=null,
 let writes=Promise.resolve();
 let generation=0,lastError=null,lastCheck=null,active=new Set(),busy=false;
 let tokenRetryAt=0,tokenFailure=null;
+const pool=new TunnelPool();let endpoint=null;
 try {saved=unseal(await fs.readFile(DIR+'/account.enc'),key);} catch(e) {if(e.code!=='ENOENT')throw Error('CREDENTIAL_STORE_INVALID');}
 function persist(){
   const bytes=seal(saved,key),epoch=generation;
@@ -20,7 +21,7 @@ function persist(){
     const p=DIR+'/account.enc.tmp';await fs.writeFile(p,bytes,{mode:0o600});await fs.rename(p,DIR+'/account.enc');
   });writes=job.catch(()=>{});return job;
 }
-function closeTunnels(){for(const s of active)s.destroy();active.clear();}
+function closeTunnels(){for(const s of active)s.destroy();active.clear();pool.close();endpoint=null;}
 async function listLocations(){
   if(catalog.length && Date.now()-catalogAt<3600000)return catalog;
   if(catalogJob)return catalogJob;
@@ -80,16 +81,18 @@ async function selectedServer(){
   const all=await listLocations();
   const country=saved.country==='REC'?all.find(c=>c.available):all.find(c=>c.code===saved.country);
   if(!country?.servers.length)throw Error('REGION_UNAVAILABLE');
-  return {country:country.code,...country.servers[Math.floor(Math.random()*country.servers.length)]};
+  if(endpoint?.country===country.code && country.servers.some(s=>s.hostname===endpoint.hostname&&s.port===endpoint.port))return endpoint;
+  if(endpoint)pool.close();
+  endpoint={country:country.code,...country.servers[Math.floor(Math.random()*country.servers.length)]};return endpoint;
 }
 async function tunnel(host,port){
   const epoch=generation;const token=await proxyPass();const server=await selectedServer();
   if(epoch!==generation)throw Error('ACCOUNT_CHANGED');
   let stream;
-  try{stream=await connectTunnel(server,token,host,port);}catch(e){
+  try{stream=await pool.open(server,token,host,port);}catch(e){
     if(e.message!=='REAUTH_REQUIRED'||epoch!==generation)throw e;
     // The rejected CONNECT carried no destination bytes; refresh once, never replay application data.
-    proxy=null;stream=await connectTunnel(server,await proxyPass(),host,port);
+    proxy=null;stream=await pool.open(server,await proxyPass(),host,port);
   }
   if(epoch!==generation){stream.destroy();throw Error('ACCOUNT_CHANGED');}
   active.add(stream);stream.once('close',()=>active.delete(stream));return {stream,server};
