@@ -38,7 +38,7 @@ export function locations(records) {
   if (!Array.isArray(records) || records.length > 1000) throw Error('CATALOG_INVALID');
   const result=[];
   for (const country of records) {
-    if (!/^[A-Z]{2}$/.test(country.code) || country.locked !== false || !Array.isArray(country.cities)) continue;
+    if (!/^[A-Z]{2}$/.test(country.code) || (country.locked !== undefined && typeof country.locked !== 'boolean') || !Array.isArray(country.cities)) continue;
     const servers=[];
     for (const city of country.cities) for (const s of city.servers || []) {
       if ((s.quarantined !== undefined && s.quarantined !== false) || !/^[a-z0-9-]+\.m[0-9]+\.fastly-masque\.net$/.test(s.hostname || '')
@@ -47,7 +47,9 @@ export function locations(records) {
       if (s.protocols && (!Array.isArray(s.protocols) || !s.protocols.every(p => p === 'https'))) continue;
       servers.push({hostname:s.hostname,port:s.port ?? 443});
     }
-    if (servers.length) result.push({code:country.code,name:String(country.name || country.code).slice(0,100),servers});
+    // `locked` is a Firefox UI prerequisite, not proof the authenticated proxy denies the account.
+    // Retain all countries and let the verified CONNECT response enforce authorization.
+    result.push({code:country.code,name:String(country.name || country.code).slice(0,100),servers});
   }
   const merged=new Map();
   for(const country of result){
@@ -55,7 +57,7 @@ export function locations(records) {
     const dest=merged.get(country.code).servers;
     for(const server of country.servers)if(!dest.some(s=>s.hostname===server.hostname&&s.port===server.port))dest.push(server);
   }
-  return [...merged.values()];
+  return [...merged.values()].map(c=>({...c,available:c.servers.length>0}));
 }
 export function quota(headers) {
   const integer=k=> /^\d+$/.test(String(headers[k] ?? '')) ? String(headers[k]) : null;

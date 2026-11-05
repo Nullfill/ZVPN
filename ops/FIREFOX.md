@@ -32,9 +32,13 @@ has backpressure and a 64-client limit. No destination request is replayed after
 sending application bytes. OAuth and ProxyPass renew separately, with single-flight
 refresh and bounded retry. Renewals still require validation with a real account.
 
+All catalog countries are shown. The Firefox `locked` flag is a browser UI prerequisite,
+not a server authorization verdict. On 2026-11-05 Austria and Netherlands accepted
+authenticated CONNECT with this account despite that flag. Countries without
+non-quarantined endpoints stay disabled; the proxy still enforces account access.
 Select an available country, test connectivity, then save the provider choice.
 The CONNECT path must carry a successful HTTPS trace before activation. Country
-`REC` selects an available unlocked location, not a guaranteed fastest server.
+`REC` selects an available location, not a guaranteed fastest server.
 TCP-only operation requires QUIC blocking; there is no UDP relay in this release.
 Domain exclusions and the configured block/direct failure policy remain effective.
 
@@ -63,7 +67,7 @@ if required. Encrypted historical backups retain the account until removed.
 ## Verification
 
 `node --test ops/firefox/core.test.mjs` covers PKCE/state, redirect/owner/expiry,
-encrypted-store tampering, catalog restrictions, unknown quota, verified TLS
+encrypted-store tampering, catalog endpoint restrictions, unknown quota, verified TLS
 HTTP/2 CONNECT, bidirectional payload and denial without destination replay.
 The TLS integration test requires Linux and OpenSSL. Router and full-backup
 tests also exercise the fixed local port, TCP-only enforcement and recovery
@@ -72,8 +76,7 @@ requirements. These tests do not prove a real Mozilla account is entitled.
 Rollout verification on 2026-11-05 completed administrator login, ProxyPass,
 HTTPS egress, a forced OAuth refresh followed by a new ProxyPass, and a Gemini
 HTTP 200 response without the country-error page. This proves the renewal path,
-not an elapsed multi-hour expiry or service availability guarantee. The free
-account's unlocked-location catalog was used. Never select this provider merely
+not an elapsed multi-hour expiry or service availability guarantee. The initial free-account catalog was used; expanded locations were verified separately. Never select this provider merely
 because its process or TLS handshake is alive.
 
 References:

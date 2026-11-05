@@ -15,7 +15,7 @@ function bytes(value?:string|null) {return value==null?'نامشخص':`${(Number
 export default function FirefoxProvider(){
   const qc=useQueryClient(),toast=useToast();const [callback,setCallback]=useState(''),[login,setLogin]=useState<{url:string;expiresAt:string}|null>(null);
   const status=useQuery({queryKey:['firefox-status'],queryFn:()=>api<Status>('/api/firefox/status'),refetchInterval:15000});
-  const countries=useQuery({queryKey:['firefox-locations'],queryFn:()=>api<{locations:{code:string;name:string}[]}>('/api/firefox/locations'),enabled:status.data?.installed===true,staleTime:3600000});
+  const countries=useQuery({queryKey:['firefox-locations'],queryFn:()=>api<{locations:{code:string;name:string;available:boolean}[]}>('/api/firefox/locations'),enabled:status.data?.installed===true,staleTime:3600000});
   const action=useMutation({mutationFn:({op,body={}}:{op:string;body?:object})=>api<Status & {url?:string;expiresAt?:string}>('/api/firefox/'+op,{method:'POST',body:JSON.stringify(body)}),
     onSuccess:(result,vars)=>{
       if(result.url && result.expiresAt)setLogin({url:result.url,expiresAt:result.expiresAt});
@@ -33,7 +33,8 @@ export default function FirefoxProvider(){
       {s.linked?<>
         <div className="grid sm:grid-cols-3 gap-3 text-xs text-muted"><span>باقیمانده: {s.quota?.unlimited===true?'نامحدود':bytes(s.quota?.remaining)}</span><span>سقف حساب: {bytes(s.quota?.limit)}</span><span>تمدید سهمیه: {s.quota?.reset?new Date(s.quota.reset).toLocaleString('fa-IR'):'نامشخص'}</span></div>
         {!s.refreshAvailable&&<p className="text-xs text-amber-400">حساب توکن تمدید ندارد؛ پس از پایان اعتبار، ورود مجدد لازم می‌شود.</p>}
-        <label className="block text-sm">کشور خروجی<select className="input block mt-2" value={s.country||'REC'} disabled={action.isPending||!countries.data} onChange={e=>action.mutate({op:'country',body:{country:e.target.value}})}><option value="REC">خودکار</option>{countries.data?.locations.map(c=><option key={c.code} value={c.code}>{c.name} ({c.code})</option>)}</select></label>
+        <label className="block text-sm">کشور خروجی<select className="input block mt-2" value={s.country||'REC'} disabled={action.isPending||!countries.data} onChange={e=>action.mutate({op:'country',body:{country:e.target.value}})}><option value="REC">خودکار</option>{countries.data?.locations.map(c=><option key={c.code} value={c.code} disabled={!c.available}>{c.name} ({c.code}){c.available?'':' · موقتاً ناموجود'}</option>)}</select></label>
+        {countries.data&&<p className="text-xs text-muted">{countries.data.locations.filter(c=>c.available).length} کشور آماده از {countries.data.locations.length} کشور؛ سرورهای قرنطینه‌شده انتخاب نمی‌شوند. پذیرش نهایی اتصال با سرویس Mozilla است.</p>}
         <div className="flex flex-wrap gap-3"><button className="btn-ghost" disabled={action.isPending} onClick={()=>action.mutate({op:'check'})}>آزمایش اتصال و سهمیه</button><button className="btn-ghost" disabled={action.isPending||!s.refreshAvailable} onClick={()=>action.mutate({op:'renew'})}>آزمایش تمدید اعتبار</button><button className="btn-ghost text-rose-300" disabled={action.isPending} onClick={()=>action.mutate({op:'logout'})}>قطع حساب و توقف مسیر Firefox</button></div>
       </>:<>
         <button className="btn-ghost" disabled={action.isPending} onClick={()=>action.mutate({op:'start'})}>شروع ورود با Mozilla</button>

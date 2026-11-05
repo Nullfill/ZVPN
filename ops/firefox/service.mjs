@@ -30,7 +30,7 @@ async function listLocations(){
       const r=await api(url);if(r.status!==200)throw Error('CATALOG_UNAVAILABLE');
       records.push(...(r.data.data || []));
       const next=r.headers['next-page'];
-      if(!next){const nextCatalog=locations(records);if(!nextCatalog.length)throw Error('NO_AVAILABLE_LOCATIONS');catalog=nextCatalog;catalogAt=Date.now();return catalog;}
+      if(!next){const nextCatalog=locations(records);if(!nextCatalog.some(c=>c.available))throw Error('NO_AVAILABLE_LOCATIONS');catalog=nextCatalog;catalogAt=Date.now();return catalog;}
       const n=new URL(next,url);if(n.origin!==new URL(CATALOG).origin || n.pathname!==new URL(CATALOG).pathname)throw Error('CATALOG_INVALID');url=n.href;
     }throw Error('CATALOG_TOO_LARGE');
   })();try{return await catalogJob;}finally{catalogJob=null;}
@@ -78,8 +78,8 @@ async function proxyPass(){
 }
 async function selectedServer(){
   const all=await listLocations();
-  const country=saved.country==='REC'?all[0]:all.find(c=>c.code===saved.country);
-  if(!country)throw Error('REGION_UNAVAILABLE');
+  const country=saved.country==='REC'?all.find(c=>c.available):all.find(c=>c.code===saved.country);
+  if(!country?.servers.length)throw Error('REGION_UNAVAILABLE');
   return {country:country.code,...country.servers[Math.floor(Math.random()*country.servers.length)]};
 }
 async function tunnel(host,port){
@@ -122,7 +122,7 @@ function status(){return {installed:true,linked:!!saved.token,experimental:true,
   ...lastCheck,country:saved.country,healthy:!!lastCheck?.healthy && !lastError,error:lastError,activeConnections:active.size,refreshAvailable:!!saved.token?.refresh_token};}
 async function control(path,input){
   if(path==='/status')return status();
-  if(path==='/locations')return {locations:(await listLocations()).map(({code,name})=>({code,name}))};
+  if(path==='/locations')return {locations:(await listLocations()).map(({code,name,available})=>({code,name,available})).sort((a,b)=>a.name.localeCompare(b.name,'en'))};
   if(path==='/check')return await check();
   if(path==='/renew'){
     if(!saved.token?.refresh_token)throw Error('REAUTH_REQUIRED');
@@ -145,7 +145,7 @@ async function control(path,input){
     return await check();
   }
   if(path==='/country'){
-    if(input.country!=='REC' && !(await listLocations()).some(c=>c.code===input.country))throw Error('REGION_UNAVAILABLE');
+    if(input.country!=='REC' && !(await listLocations()).some(c=>c.code===input.country && c.available))throw Error('REGION_UNAVAILABLE');
     generation++;proxy=null;lastCheck=null;lastError=null;tokenRetryAt=0;closeTunnels();saved.country=input.country;await persist();return status();
   }
   if(path==='/logout'){

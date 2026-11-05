@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## 3.5.1 - 2026-11-05
+
+- Show the full Firefox location catalog instead of filtering countries by the browser UI `locked` flag. Authenticated Austria and Netherlands egress were verified.
+- Mark countries without healthy endpoints unavailable and continue rejecting quarantined/untrusted proxies.
+- Preserve administrator-selected domain lists and verify direct-versus-proxy routing separately.
+
 ## 3.5.0 - 2026-11-05
 
 - Add an optional experimental Firefox Built-in VPN provider beside WARP/Psiphon for selected Google traffic.

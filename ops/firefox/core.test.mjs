@@ -25,14 +25,16 @@ test('encrypted account needs matching key and detects modification',()=>{
   assert.deepEqual(unseal(bytes,key),data);assert.throws(()=>unseal(bytes,crypto.randomBytes(32)));
   bytes[30]^=1;assert.throws(()=>unseal(bytes,key));
 });
-test('catalog rejects arbitrary hosts, locked locations, quarantined servers and unknown transports',()=>{
+test('catalog exposes all countries but never selects quarantined or arbitrary proxy endpoints',()=>{
   const s={hostname:'fra12.m1.fastly-masque.net',port:2499};
   const record=servers=>({code:'DE',name:'Germany',locked:false,cities:[{servers}]});
   assert.equal(locations([record([s])])[0].servers[0].hostname,s.hostname);
   for(const change of [{hostname:'127.0.0.1'},{hostname:'example.com'},{port:0},{quarantined:true},{protocols:['http']},{protocols:'https'}])
-    assert.deepEqual(locations([record([{...s,...change}])]),[]);
-  assert.deepEqual(locations([{...record([s]),locked:true}]),[]);
-  assert.deepEqual(locations([{...record([s]),locked:undefined}]),[]);
+    assert.deepEqual(locations([record([{...s,...change}])])[0].servers,[]);
+  assert.equal(locations([{...record([s]),locked:true}])[0].available,true);
+  assert.equal(locations([{...record([s]),locked:undefined}])[0].available,true);
+  assert.equal(locations([record([{...s,quarantined:true}])])[0].available,false);
+  assert.equal(locations([record([s]),record([s])]).length,1);
 });
 test('quota stays unknown without headers and byte counts retain precision',()=>{
   assert.deepEqual(quota({}),{limit:null,remaining:null,reset:null,unlimited:null});
