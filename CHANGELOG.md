@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## 3.5.0 - 2026-11-05
+
+- Add an optional experimental Firefox Built-in VPN provider beside WARP/Psiphon for selected Google traffic.
+- Add administrator-owned Mozilla login with PKCE/state, country selection, quota/status and verified connection testing before selection.
+- Add a local native HTTP/2 CONNECT sidecar with encrypted account storage, bounded concurrency and token renewal.
+- Include the provider, matching credential key and source in installation, upgrade, full backup and migration.
+- Keep existing routing selected until a real Firefox account and tunnel are verified. Live administrator login, OAuth/ProxyPass renewal and Gemini HTTPS egress were verified during rollout.
+
 ## 3.4.3 - 2026-11-02
 
 - Route Google companion and challenge endpoints with Gemini/Antigravity to avoid mixed direct/proxy egress during sign-in and checks.

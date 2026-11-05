@@ -6,6 +6,27 @@ spec=importlib.util.spec_from_file_location('restore',ROOT/'ops/restore-full-bac
 restore=importlib.util.module_from_spec(spec);spec.loader.exec_module(restore)
 
 class FullBackupTests(unittest.TestCase):
+    def test_enabled_firefox_requires_account_ciphertext_and_matching_key_in_snapshot(self):
+        data, _ = self.snapshot()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            restore.safe_extract(data, root)
+            policy = root/'warp-policy/warp.json'
+            policy.parent.mkdir(parents=True)
+            policy.write_text(json.dumps({'enabled': True, 'provider': 'firefox'}))
+            manifest = json.loads((root/'manifest.json').read_text())
+            manifest['checksums']['warp-policy/warp.json'] = hashlib.sha256(policy.read_bytes()).hexdigest()
+            (root/'manifest.json').write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, 'Incomplete Firefox backup'):
+                restore.verify_snapshot(root)
+            for name in ('warp-policy/firefox.key', 'firefox-account/account.enc'):
+                target = root/name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b'encrypted fixture')
+                manifest['checksums'][name] = hashlib.sha256(target.read_bytes()).hexdigest()
+            (root/'manifest.json').write_text(json.dumps(manifest))
+            restore.verify_snapshot(root)
+
     def test_enabled_psiphon_requires_its_network_configuration(self):
         data, _ = self.snapshot()
         with tempfile.TemporaryDirectory() as directory:

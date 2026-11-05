@@ -16,6 +16,8 @@ export const ERROR_MESSAGES = {
   INVALID_ENDPOINT: 'Endpoint نامعتبر است.',
   HELPER_FAILED: 'عملیات سرور VPN ناموفق بود.',
   INTERNAL_ERROR: 'خطای داخلی سرور.',
+  FIREFOX_LINK_AND_TEST_FIRST: 'ابتدا حساب Mozilla را وصل کنید و آزمایش موفق اتصال Firefox را انجام دهید.',
+  FIREFOX_TCP_REQUIRES_DISABLE_QUIC: 'برای خروجی Firefox، گزینهٔ سازگاری HTTP/3 باید روشن بماند.',
 };
 
 Object.assign(ERROR_MESSAGES, {

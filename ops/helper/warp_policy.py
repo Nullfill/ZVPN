@@ -25,8 +25,10 @@ def validate(data):
     if not isinstance(data, dict) or not required <= set(data) <= required | {'provider', 'antigravityViaWarp'}:
         raise ValueError('Invalid WARP policy fields')
     data = {**data, 'provider': data.get('provider', 'warp'), 'antigravityViaWarp': data.get('antigravityViaWarp', False)}
-    if data['provider'] not in ('warp', 'psiphon'):
+    if data['provider'] not in ('warp', 'psiphon', 'firefox'):
         raise ValueError('Invalid routing provider')
+    if data['provider'] == 'firefox' and data['disableQuic'] is not True:
+        raise ValueError('Firefox requires TCP-only QUIC blocking')
     for field in ('enabled', 'disableQuic', 'antigravityViaWarp'):
         if type(data[field]) is not bool:
             raise ValueError('Invalid boolean')
@@ -123,6 +125,6 @@ def gateway_config(policy, healthy=True, warp_healthy=True):
              'settings': {'address': '127.0.0.1'}},
         ],
         'outbounds': [{'tag': 'direct', 'protocol': 'freedom'}, {'tag': 'warp', 'protocol': 'socks',
-                      'settings': {'servers': [{'address': '127.0.0.1', 'port': 40002 if policy.get('provider') == 'psiphon' else 40000}]}}] + extra_outbounds,
+                      'settings': {'servers': [{'address': '127.0.0.1', 'port': {'warp': 40000, 'psiphon': 40002, 'firefox': 40003}[policy.get('provider', 'warp')]}]}}] + extra_outbounds,
         'routing': {'rules': rules},
     }

@@ -35,11 +35,16 @@ def verify_snapshot(root):
                  'ipsec.d/certs/ikev2-server-cert.pem','ipsec.d/private/ikev2-server-key.pem'):
         if name not in manifest['checksums']: raise ValueError('Incomplete full backup: '+name)
     relay=root/'warp-policy/ike-relay.json'
+    if (root/'firefox-account/account.enc').is_file() and 'warp-policy/firefox.key' not in manifest['checksums']:
+        raise ValueError('Firefox backup missing encryption key')
     route=root/'warp-policy/warp.json'
     if route.is_file():
         policy=json.loads(route.read_text())
         if policy.get('enabled') and policy.get('provider') == 'psiphon' and 'warp-policy/psiphon.json' not in manifest['checksums']:
             raise ValueError('Incomplete Psiphon backup')
+        if policy.get('enabled') and policy.get('provider') == 'firefox':
+            for name in ('warp-policy/firefox.key', 'firefox-account/account.enc'):
+                if name not in manifest['checksums']: raise ValueError('Incomplete Firefox backup')
     if relay.is_file() and json.loads(relay.read_text()).get('enabled'):
         for name in ('ipsec.d/zvpn-ike-relay.conf','ipsec.d/certs/zvpn-ike-relay-cert.pem'):
             if name not in manifest['checksums']:
@@ -113,7 +118,7 @@ def restore(root):
     apply_network_optimizations(app)
     run(['systemctl','stop','zvpn-panel','strongswan-starter'])
     subprocess.run(['systemctl','stop','xray'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    subprocess.run(['systemctl','stop','zvpn-warp-router','warp-svc'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    subprocess.run(['systemctl','stop','zvpn-warp-router','warp-svc','zvpn-firefox'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     shutil.copy2(root/'panel.env',app/'backend/.env')
     run(['chown','zvpn:zvpn',str(app/'backend/.env')]);os.chmod(app/'backend/.env',0o600)
     ident=lambda value:'"'+value.replace('"','""')+'"'
@@ -132,6 +137,13 @@ def restore(root):
         copy_tree(root/name,destination)
     copy_tree(root/'legacy-public','/opt/zvpn-panel/backend/public')
     # Relay state is independent of whether WARP was installed on the source.
+    if (root/'firefox-account/account.enc').is_file():
+        copy_tree(root/'firefox-account','/var/lib/zvpn-panel/firefox')
+        copy_tree(root/'warp-policy/firefox.key','/etc/zvpn/firefox.key')
+    else:
+        # Replacing an installation must not retain the destination's previous account.
+        for name in ('account.enc', 'account.enc.tmp'):
+            (pathlib.Path('/var/lib/zvpn-panel/firefox')/name).unlink(missing_ok=True)
     if (root/'warp-policy/ike-relay.json').is_file():
         copy_tree(root/'warp-policy/ike-relay.json','/etc/zvpn/ike-relay.json')
     # Optional WARP state is present only on servers where it was installed.

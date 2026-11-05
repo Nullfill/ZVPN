@@ -51,7 +51,7 @@ class WarpPolicyTests(unittest.TestCase):
         with self.assertRaises(ValueError): policy.validate(data)
 
     def test_provider_selects_only_fixed_local_proxy_and_preserves_domain_rules(self):
-        for provider, port in [('warp', 40000), ('psiphon', 40002)]:
+        for provider, port in [('warp', 40000), ('psiphon', 40002), ('firefox', 40003)]:
             data = policy.validate({**sample(), 'provider': provider})
             config = policy.gateway_config(data)
             self.assertEqual(config['outbounds'][1]['settings']['servers'], [{'address': '127.0.0.1', 'port': port}])
@@ -59,6 +59,8 @@ class WarpPolicyTests(unittest.TestCase):
             self.assertEqual(config['routing']['rules'][1]['outboundTag'], 'direct')
         for provider in ['shell', '127.0.0.1:22', None]:
             with self.assertRaises(ValueError): policy.validate({**sample(), 'provider': provider})
+        with self.assertRaises(ValueError):
+            policy.validate({**sample(), 'provider': 'firefox', 'disableQuic': False})
 
     def test_selected_users_exclusions_api_and_quota_accounting_are_preserved(self):
         original = core(); applied = policy.main_xray(original, sample())

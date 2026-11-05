@@ -1,0 +1,29 @@
+[Unit]
+Description=ZVPN Firefox optional upstream
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zvpn-firefox
+Group=zvpn
+SupplementaryGroups=zvpn-firefox
+RuntimeDirectory=zvpn-firefox
+RuntimeDirectoryMode=0750
+StateDirectory=zvpn-panel/firefox
+StateDirectoryMode=0700
+ExecStart=/usr/bin/node /usr/local/libexec/zvpn/firefox/service.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+UMask=0077
+MemoryMax=256M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

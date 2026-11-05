@@ -3,11 +3,16 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { config } from '../config.js';
 import { getSetting } from './settings.js';
+import { firefoxControl } from './firefox.js';
 const exec = promisify(execFile);
 const runtime = '/opt/zvpn-panel/runtime/warp.json';
 
 export async function prepareWarpPolicy(users) {
   const settings = await getSetting('warp');
+  if (settings.enabled && settings.provider === 'firefox') {
+    const status = await firefoxControl('status');
+    if (!status.linked) throw new Error('FIREFOX_REAUTH_REQUIRED');
+  }
   if (settings.enabled && settings.provider === 'psiphon' && !await fs.access('/usr/local/bin/zvpn-psiphon').then(() => true, () => false)) {
     throw new Error('PSIPHON_NOT_INSTALLED_RUN_UPGRADE');
   }
@@ -35,6 +40,7 @@ export async function getWarpStatus() {
   const providers = {
     warp: await fs.access('/usr/bin/warp-cli').then(() => true, () => false),
     psiphon: await fs.access('/usr/local/bin/zvpn-psiphon').then(() => true, () => false),
+    firefox: await fs.access('/usr/local/libexec/zvpn/firefox/service.mjs').then(() => true, () => false),
   };
   const provider = settings.provider || 'warp';
   const installed = providers[provider] === true;
@@ -46,6 +52,7 @@ export async function getWarpStatus() {
 }
 
 export async function reconnectWarp() {
+  if ((await getSetting('warp')).provider === 'firefox') { await firefoxControl('reconnect'); return; }
   await exec('sudo', [config.helper, 'warp-reconnect'], { timeout: 15000 });
 }
 

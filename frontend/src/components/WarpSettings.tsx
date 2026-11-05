@@ -5,10 +5,11 @@ import { api } from '../lib/api';
 import { fmtBytes, fmtDate } from '../lib/format';
 import { GlassCard } from './UI';
 import { useToast } from './Toast';
+import FirefoxProvider from './FirefoxProvider';
 
-type Policy = { provider: 'warp' | 'psiphon'; antigravityViaWarp: boolean; enabled: boolean; scope: 'all' | 'selected'; userIds: string[]; domains: string[];
+type Policy = { provider: 'warp' | 'psiphon' | 'firefox'; antigravityViaWarp: boolean; enabled: boolean; scope: 'all' | 'selected'; userIds: string[]; domains: string[];
   excludedDomains: string[]; failureMode: 'block' | 'direct'; disableQuic: boolean };
-type Status = { provider?: 'warp' | 'psiphon'; providers?: Record<string, boolean>; installed: boolean; state: string; healthy?: boolean; stale: boolean; totalBytes: number;
+type Status = { provider?: 'warp' | 'psiphon' | 'firefox'; providers?: Record<string, boolean>; installed: boolean; state: string; healthy?: boolean; stale: boolean; totalBytes: number;
   todayBytes: number; uplinkBytes?: number; downlinkBytes?: number; country?: string; exitIp?: string;
   latencyMs?: number; updatedAt?: string; checkedAt?: string; activeIkeSessions?: number; error?: string;
   antigravity?: { healthy: boolean; exitIp?: string; error?: string }; daily?: Record<string, number> };
@@ -64,7 +65,7 @@ export default function WarpSettings() {
   const s = status.data;
   const enabled = settings.data?.settings.warp.enabled ?? false;
   const selectedInstalled = s?.providers ? s.providers[form.provider || 'warp'] : s?.installed;
-  const providerLabel = settings.data?.settings.warp.provider === 'psiphon' ? 'Psiphon' : 'WARP';
+  const providerLabel = {warp:'WARP', psiphon:'Psiphon', firefox:'Firefox VPN'}[settings.data?.settings.warp.provider || 'warp'];
   const states: Record<string, string> = { connected: 'متصل', disabled: 'خاموش', degraded: 'اتصال ناموفق', error: 'خطا', not_ready: 'آماده نیست' };
   const daily = Object.entries(s?.daily || {}).sort(([a], [b]) => b.localeCompare(a)).slice(0, 7);
   return <div className="space-y-5">
@@ -90,7 +91,7 @@ export default function WarpSettings() {
         {enabled && settings.data?.settings.warp.provider === 'psiphon' && settings.data?.settings.warp.antigravityViaWarp &&
           <span>مسیر آنتی‌گرویتی: WARP · {s?.antigravity?.healthy ? <b dir="ltr">{s.antigravity.exitIp}</b> : 'در حال بررسی اتصال'}</span>}
       </div>
-      <p className="text-xs text-muted">آخرین بررسی اتصال: {fmtDate(s?.checkedAt)} · آمار ترافیک واقعی عبوری از WARP و Psiphon است و دوباره از سهمیه کاربر کم نمی‌شود. آمار از زمان فعال‌سازی ثبت می‌شود؛ هنگام قطع ناگهانی ممکن است چند ثانیه آخر ثبت نشود.</p>
+      <p className="text-xs text-muted">آخرین بررسی اتصال: {fmtDate(s?.checkedAt)} · آمار ترافیک واقعی عبوری از WARP، سایفون و Firefox است و دوباره از سهمیه کاربر کم نمی‌شود. آمار از زمان فعال‌سازی ثبت می‌شود؛ هنگام قطع ناگهانی ممکن است چند ثانیه آخر ثبت نشود.</p>
       {s?.error && <p className="text-sm text-amber-400 break-words" dir="ltr">{s.error}</p>}
       {status.isError && <p className="text-amber-400 text-sm">دریافت وضعیت ناموفق بود؛ دسترسی یا سرویس را بررسی کنید.</p>}
       {s && !s.installed && <p className="text-amber-400 text-sm">نصب سرویس انتخاب‌شده روی این سرور کامل نشده است؛ مدیر سرور باید نصب را دوباره اجرا کند.</p>}
@@ -107,12 +108,13 @@ export default function WarpSettings() {
     <GlassCard className="space-y-5">
       <h3 className="font-bold">انتخاب سایت‌ها و کاربران</h3>
       <label className="block space-y-2"><span className="font-bold text-sm">سرویس خروجی</span>
-        <select className="input w-full" value={form.provider || 'warp'} onChange={e => setForm({ ...form, provider: e.target.value as Policy['provider'] })}>
-          <option value="warp">Cloudflare WARP</option><option value="psiphon">Psiphon — سایفون</option>
+        <select className="input w-full" value={form.provider || 'warp'} onChange={e => setForm({ ...form, provider: e.target.value as Policy['provider'], disableQuic: e.target.value === 'firefox' ? true : form.disableQuic })}>
+          <option value="warp">Cloudflare WARP</option><option value="psiphon">Psiphon — سایفون</option><option value="firefox">Firefox VPN — آزمایشی</option>
         </select>
         <span className="block text-xs text-muted">فقط سایت‌های فهرست زیر از این سرویس می‌روند. تغییر سرویس را ذخیره کنید؛ IP جدید هم ممکن است توسط گوگل محدود شود.</span>
         {s?.providers && s.providers[form.provider || 'warp'] === false && <span className="block text-amber-400 text-xs">این سرویس هنوز نصب نشده؛ ابتدا اسکریپت آپدیت سرور را اجرا کنید.</span>}
       </label>
+      {form.provider === 'firefox' && <FirefoxProvider />}
       {form.provider === 'psiphon' && <label className="block rounded-xl border border-[var(--line)] p-4 space-y-2">
         <span className="flex items-center gap-2 font-bold text-sm"><input type="checkbox" checked={form.antigravityViaWarp || false}
           onChange={e => setForm({ ...form, antigravityViaWarp: e.target.checked })} /> پایداری آنتی‌گرویتی با WARP</span>
@@ -144,7 +146,7 @@ export default function WarpSettings() {
       </div>
       <div className="grid md:grid-cols-2 gap-5">
         <label className="space-y-2"><span className="block font-bold text-sm">هنگام قطع مسیر انتخابی</span><select className="input w-full" value={form.failureMode} onChange={e => setForm({ ...form, failureMode: e.target.value as Policy['failureMode'] })}><option value="block">سایت‌های مشمول قطع بمانند</option><option value="direct">موقتاً از اینترنت مستقیم سرور استفاده شود</option></select><span className="block text-xs text-muted">این انتخاب روی سایت‌های دیگر و اتصال SSH اثر ندارد.</span></label>
-        <label className="space-y-2"><span className="flex gap-2 items-center font-bold text-sm"><input type="checkbox" checked={form.disableQuic} onChange={e => setForm({ ...form, disableQuic: e.target.checked })} /> سازگاری HTTP/3</span><span className="block text-xs text-muted">برای جلوگیری از عبور مستقیم Gemini، در IKEv2 ارتباط UDP/443 کاربران مشمول بسته می‌شود تا مرورگر از TCP استفاده کند. این تغییر ممکن است HTTP/3 سایر سایت‌های همان کاربران را هم به HTTP/2 تبدیل کند. در Xray فقط دامنه‌های مشمول اعمال می‌شود.</span></label>
+        <label className="space-y-2"><span className="flex gap-2 items-center font-bold text-sm"><input type="checkbox" disabled={form.provider === 'firefox'} checked={form.disableQuic} onChange={e => setForm({ ...form, disableQuic: e.target.checked })} /> سازگاری HTTP/3</span><span className="block text-xs text-muted">برای جلوگیری از عبور مستقیم Gemini، در IKEv2 ارتباط UDP/443 کاربران مشمول بسته می‌شود تا مرورگر از TCP استفاده کند. این تغییر ممکن است HTTP/3 سایر سایت‌های همان کاربران را هم به HTTP/2 تبدیل کند. در Xray فقط دامنه‌های مشمول اعمال می‌شود.</span></label>
       </div>
       <p className="text-xs text-muted">تشخیص دامنه از اتصال رمزگذاری‌شده به SNI وابسته است؛ ECH یا برنامه‌هایی که نام سایت را پنهان می‌کنند ممکن است نیاز به تنظیم کلاینت داشته باشند. IP خروجی به سرویس انتخاب‌شده بستگی دارد و دسترسی همیشگی به Gemini تضمین نمی‌شود.</p>
       <button className="btn-primary" disabled={save.isPending || toggle.isPending || !lines(domains).length || (!selectedInstalled && form.enabled)} onClick={() => save.mutate()}><Save size={16} />{save.isPending ? 'در حال اعمال…' : 'ذخیره و اعمال تنظیمات'}</button>

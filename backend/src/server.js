@@ -32,6 +32,7 @@ import { xrayRelayLink, xrayRelayTemplate } from './services/xrayRelayConfig.js'
 import { subscriptionInfo, subscriptionLinks } from './services/subscription.js';
 import { getXrayStatus } from './services/xray.js';
 import { getWarpStatus, reconnectWarp, rotateWarpIp } from './services/warp.js';
+import { firefoxControl } from './services/firefox.js';
 import { GEMINI_DOMAINS, ANTIGRAVITY_DOMAINS } from './services/warpDefaults.js';
 import { listUsers, getUserById, provisionUser, updateUser, extendUser, addTraffic, deleteUser, regenerateToken, revokeToken, getUserStats, downloadLinks, bulkUsers, resetActivation, resetUserPassword } from './services/users.js';
 import { getSettings, updateSettings, validateSettingsPatch, getSetting } from './services/settings.js';
@@ -325,6 +326,30 @@ app.get('/api/xray-relay/template', requireAdmin, adminOnly, asyncHandler(async 
 app.get('/api/ike-relay/status', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json(await getIkeRelayStatus())));
 app.get('/api/ike-relay/template', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json(await getIkeRelayTemplate())));
 app.get('/api/warp/status', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json(await getWarpStatus())));
+app.get('/api/firefox/status', requireAdmin, adminOnly, asyncHandler(async (_req,res)=>{
+  res.json(await firefoxControl('status').catch(e=>({installed:fs.existsSync('/usr/local/libexec/zvpn/firefox/service.mjs'),
+    linked:false,state:'UNAVAILABLE',error:e.message})));
+}));
+app.get('/api/firefox/locations', requireAdmin, adminOnly, asyncHandler(async (_req,res)=>{
+  try { res.json(await firefoxControl('locations')); } catch(e) {res.status(400).json({error:e.message,message:e.message});}
+}));
+app.post('/api/firefox/:operation', requireAdmin, adminOnly, asyncHandler(async (req,res)=>{
+  const op=req.params.operation;
+  const schemas={start:z.object({}).strict(), complete:z.object({callback:z.string().max(4096).url()}).strict(),
+    country:z.object({country:z.string().regex(/^(REC|[A-Z]{2})$/)}).strict(),
+    check:z.object({}).strict(), renew:z.object({}).strict(), logout:z.object({}).strict()};
+  const parsed=schemas[op]?.safeParse(req.body);
+  if(!parsed?.success)return apiError(res,400,'INVALID_INPUT');
+  // Stop selected-provider traffic before removing its credential. Never log callback codes.
+  if(op==='logout' && (await getSetting('warp')).provider==='firefox') {
+    await updateSettings('warp',{enabled:false});await syncSecretsNow(60000);
+  }
+  try {
+    const result=await firefoxControl(op==='start'?'login/start':op==='complete'?'login/complete':op,{...parsed.data,owner:req.admin.id});
+    await audit(req.admin.id,'firefox.'+op,'settings','warp',{},clientIp(req));
+    res.json(result);
+  } catch(e) {res.status(400).json({error:e.message,message:e.message});}
+}));
 app.get('/api/warp/presets', requireAdmin, adminOnly, asyncHandler(async (_req, res) => res.json({ geminiDomains: GEMINI_DOMAINS, antigravityDomains: ANTIGRAVITY_DOMAINS })));
 app.get('/api/warp/users', requireAdmin, adminOnly, asyncHandler(async (_req, res) =>
   res.json({ users: await many('SELECT id, username FROM vpn_users ORDER BY username') })));
@@ -342,6 +367,14 @@ app.patch('/api/settings/:section', requireAdmin, adminOnly, asyncHandler(async 
   const section = req.params.section;
   const parsed = validateSettingsPatch(section, req.body);
   if (!parsed.success) return apiError(res, 400, 'INVALID_INPUT', parsed.error?.flatten?.());
+  if (section === 'warp') {
+    const next = { ...await getSetting('warp'), ...parsed.data };
+    if (next.provider === 'firefox' && !next.disableQuic) return apiError(res, 400, 'FIREFOX_TCP_REQUIRES_DISABLE_QUIC');
+    if (next.enabled && next.provider === 'firefox') {
+      const status = await firefoxControl('status').catch(() => null);
+      if (!status?.linked || !status?.healthy) return apiError(res, 400, 'FIREFOX_LINK_AND_TEST_FIRST');
+    }
+  }
   if (section === 'vpn' && (Object.hasOwn(req.body, 'serverAddress') || Object.hasOwn(req.body, 'remoteId'))) {
     return apiError(res, 400, 'ENDPOINT_USE_WIZARD');
   }

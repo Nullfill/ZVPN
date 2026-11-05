@@ -56,7 +56,7 @@ const SETTINGS_SCHEMAS = {
     .refine(value => !value.hostname || value.hostname !== new URL(config.publicBaseUrl).hostname, 'Relay and origin domains must differ'),
   warp: z.object({
     enabled: z.boolean().optional(),
-    provider: z.enum(['warp', 'psiphon']).optional(),
+    provider: z.enum(['warp', 'psiphon', 'firefox']).optional(),
     antigravityViaWarp: z.boolean().optional(),
     scope: z.enum(['all', 'selected']).optional(),
     userIds: z.array(z.string().uuid()).max(10000).optional(),

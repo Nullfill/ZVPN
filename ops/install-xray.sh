@@ -64,4 +64,7 @@ fi
 if ! bash "$SOURCE_DIR/ops/install-psiphon.sh"; then
   echo '[WARNING] Psiphon installation did not complete. Existing VPN services remain available; rerun ops/install-psiphon.sh to retry.' >&2
 fi
+if ! bash "$SOURCE_DIR/ops/install-firefox.sh"; then
+  echo '[WARNING] Firefox provider unavailable; existing VPN services remain available. Retry ops/install-firefox.sh.' >&2
+fi
 echo "Xray $VERSION installed; accounts are synchronized by ZVPN."

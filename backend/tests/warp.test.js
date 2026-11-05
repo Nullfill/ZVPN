@@ -9,6 +9,7 @@ import { WARP_DEFAULTS, GEMINI_DOMAINS, ANTIGRAVITY_DOMAINS } from '../src/servi
 test('WARP settings accept explicit domains and user scope but reject executable/routing input', () => {
   assert.equal(validateSettingsPatch('warp', WARP_DEFAULTS).success, true);
   assert.equal(validateSettingsPatch('warp', { provider: 'psiphon' }).success, true);
+  assert.equal(validateSettingsPatch('warp', { provider: 'firefox' }).success, true);
   assert.equal(validateSettingsPatch('warp', { antigravityViaWarp: true }).success, true);
   assert.equal(validateSettingsPatch('warp', { antigravityViaWarp: 'yes' }).success, false);
   assert.equal(validateSettingsPatch('warp', { provider: 'http://127.0.0.1:22' }).success, false);

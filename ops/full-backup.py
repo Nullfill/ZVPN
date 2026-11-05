@@ -58,6 +58,7 @@ def collect(destination):
         'legacy-public': Path('/opt/zvpn-panel/backend/public'),
         'warp-policy': Path('/etc/zvpn'),
         'warp-usage': Path('/var/lib/zvpn-panel/warp'),
+        'firefox-account': Path('/var/lib/zvpn-panel/firefox'),
     }
     if env_value(env.read_text(), 'PUBLIC_BASE_URL').startswith('https://'):
         tls = Path('/etc/letsencrypt/live')
@@ -90,6 +91,9 @@ def collect(destination):
             raise RuntimeError('Incomplete backup: WARP registration unavailable')
         if policy.get('enabled') and policy.get('provider') == 'psiphon' and not Path('/etc/zvpn/psiphon.json').is_file():
             raise RuntimeError('Incomplete backup: Psiphon configuration unavailable')
+        if policy.get('enabled') and policy.get('provider') == 'firefox':
+            if not Path('/etc/zvpn/firefox.key').is_file() or not Path('/var/lib/zvpn-panel/firefox/account.enc').is_file():
+                raise RuntimeError('Incomplete backup: Firefox credential store unavailable')
         target = destination/'warp-registration'; target.mkdir(mode=0o700, exist_ok=True)
         for name in ('reg.json', 'settings.json', 'conf.json', 'warp.db'):
             source = registration/name
@@ -101,7 +105,7 @@ def collect(destination):
                 os.chmod(target/name,0o600)
             else: shutil.copy2(source,target/name)
     systemd = destination / 'systemd'; systemd.mkdir(exist_ok=True)
-    for name in ('zvpn-panel.service', 'xray.service', 'zvpn-warp-router.service', 'zvpn-psiphon.service', 'zvpn-ike-direct-port.service'):
+    for name in ('zvpn-panel.service', 'xray.service', 'zvpn-warp-router.service', 'zvpn-psiphon.service', 'zvpn-firefox.service', 'zvpn-ike-direct-port.service'):
         src = Path('/etc/systemd/system') / name
         if src.is_file(): shutil.copy2(src, systemd / name)
         dropins = Path('/etc/systemd/system') / (name + '.d')

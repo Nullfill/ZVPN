@@ -170,8 +170,8 @@ def provider_name():
 
 
 def connect_provider(provider, restart=False):
-    if provider == 'psiphon':
-        command(['systemctl', 'restart' if restart else 'start', 'zvpn-psiphon.service'])
+    if provider in ('psiphon', 'firefox'):
+        command(['systemctl', 'restart' if restart else 'start', 'zvpn-' + provider + '.service'])
     else:
         command(['warp-cli', '--accept-tos', 'connect'])
 
@@ -180,10 +180,10 @@ def probe(provider=None):
     provider = provider or provider_name()
     start = time.monotonic()
     try:
-        port = 40002 if provider == 'psiphon' else 40000
+        port = {'warp': 40000, 'psiphon': 40002, 'firefox': 40003}[provider]
         trace = command(['curl', '--fail', '--silent', '--show-error', '--max-time', '8', '--socks5-hostname', '127.0.0.1:' + str(port), '-4', 'https://www.cloudflare.com/cdn-cgi/trace'], timeout=10).stdout
         fields = dict(line.split('=', 1) for line in trace.splitlines() if '=' in line)
-        healthy = ipaddress.ip_address(fields.get('ip', '')).is_global and (provider == 'psiphon' or fields.get('warp') == 'on')
+        healthy = ipaddress.ip_address(fields.get('ip', '')).is_global and (provider != 'warp' or fields.get('warp') == 'on')
         return {'provider': provider, 'healthy': healthy, 'exitIp': fields.get('ip'), 'country': fields.get('loc'),
                 'latencyMs': round((time.monotonic() - start) * 1000), 'checkedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'error': None}
     except Exception:
@@ -340,7 +340,7 @@ def main():
     args = parser.parse_args()
     if args.action == 'sync': sync_policy()
     elif args.action == 'cleanup': cleanup(); guard(remove=True)
-    elif args.action == 'reconnect': connect_provider(provider_name(), restart=provider_name() == 'psiphon')
+    elif args.action == 'reconnect': connect_provider(provider_name(), restart=provider_name() in ('psiphon', 'firefox'))
     elif args.action == 'rotate-ip': print(json.dumps(rotate_ip()))
     elif args.action == 'status': print((STATE / 'status.json').read_text())
     else: daemon()
