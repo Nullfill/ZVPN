@@ -44,6 +44,15 @@ test('quota stays unknown without headers and byte counts retain precision',()=>
   assert.equal(authority('::1',443),'[::1]:443');
   for(const h of ['site\r\nProxy-Authorization: x','a/b','example:443'])assert.throws(()=>authority(h,443));
 });
+test('the US location excludes the global Mozilla anycast endpoint',()=>{
+  const automatic={hostname:'p.m1.fastly-masque.net',port:2499};
+  const unitedStates={hostname:'us.m1.fastly-masque.net',port:2499};
+  const location=(code,server)=>({code,cities:[{servers:[server]}]});
+  const [us]=locations([location('REC',automatic),location('US',unitedStates),location('US',automatic)]);
+  assert.equal(us.code,'US');
+  assert.deepEqual(us.servers,[unitedStates]);
+  assert.equal(locations([location('US',automatic)])[0].available,false);
+});
 test('TLS HTTP/2 CONNECT supports bidirectional flow and rejects denial without retry',
   {skip:process.platform==='win32'},async()=>{
     const dir=await fs.mkdtemp(path.join(os.tmpdir(),'firefox-h2-test-'));let server;

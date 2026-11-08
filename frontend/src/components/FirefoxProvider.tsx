@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useToast } from './Toast';
 
-type Status = {installed:boolean;linked:boolean;state:string;error?:string;healthy?:boolean;country?:string;
+type Status = {installed:boolean;linked:boolean;state:string;error?:string;healthy?:boolean;country?:string;egressCountry?:string|null;
   exitIp?:string;refreshAvailable?:boolean;quota?:{remaining:string|null;limit:string|null;reset:string|null;unlimited:boolean|null}};
 const errors:Record<string,string>={REAUTH_REQUIRED:'حساب نیاز به ورود دارد.',LOGIN_EXPIRED:'مهلت ورود تمام شده؛ دوباره شروع کنید.',
   INVALID_CALLBACK:'نشانی بازگشت با این تلاش ورود مطابقت ندارد. نشانی کامل صفحهٔ موفقیت Mozilla را وارد کنید.',
@@ -29,6 +29,10 @@ export default function FirefoxProvider(){
     <div><h4 className="font-bold">Firefox VPN · آزمایشی</h4><p className="text-xs text-muted mt-2">خروجی سوم برای همین سایت‌ها و کاربران انتخاب‌شده؛ نیازمند حساب Mozilla مدیر است. سهمیهٔ حساب بین ترافیک کاربران مشمول مشترک است. این اتصال مستقل، رسمیِ Mozilla نیست.</p></div>
     {status.isLoading?<p className="text-muted text-sm">در حال دریافت وضعیت حساب و سرویس…</p>:status.isError||s?.state==='UNAVAILABLE'?<p className="text-amber-400 text-sm">دریافت وضعیت فعلاً ناموفق است؛ چند لحظه بعد دوباره بررسی می‌شود.</p>:!s?.installed?<p className="text-amber-400 text-sm">سرویس نصب نشده؛ ابتدا اسکریپت آپدیت سرور را اجرا کنید.</p>:<>
       <p className="text-sm">حساب: {s.linked?'متصل':'نیاز به ورود'} · تونل: {s.healthy?'آزمایش موفق':s.state==='READY'?'آمادهٔ آزمایش':'تأیید نشده'} {s.exitIp&&<span dir="ltr"> · {s.exitIp}</span>}</p>
+      {s.egressCountry&&<p className={s.country!=='REC'&&s.country!==s.egressCountry?'text-sm text-amber-400':'text-sm text-muted'}>
+        کشور خروجی در آخرین آزمایش {s.egressCountry}
+        {s.country&&s.country!=='REC'&&s.country!==s.egressCountry&&' · با کشور انتخاب‌شده متفاوت است'}
+      </p>}
       {s.error&&<p className="text-amber-400 text-sm">{errors[s.error]||s.error}</p>}
       {s.linked?<>
         <div className="grid sm:grid-cols-3 gap-3 text-xs text-muted"><span>باقیمانده: {s.quota?.unlimited===true?'نامحدود':bytes(s.quota?.remaining)}</span><span>سقف حساب: {bytes(s.quota?.limit)}</span><span>تمدید سهمیه: {s.quota?.reset?new Date(s.quota.reset).toLocaleString('fa-IR'):'نامشخص'}</span></div>

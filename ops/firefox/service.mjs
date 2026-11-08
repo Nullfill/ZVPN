@@ -114,7 +114,8 @@ async function check(){
     });
     const fields=Object.fromEntries(result.split(/\r?\n/).filter(l=>/^(ip|loc)=/.test(l)).map(l=>l.split('=')));
     if(!/^HTTP\/1\.[01] 200 /.test(result)||!net.isIP(fields.ip))throw Error('PROBE_FAILED');
-    lastCheck={healthy:true,exitIp:fields.ip,country:fields.loc,requestedCountry:saved.country,serverCountry:t.server.country,checkedAt:new Date().toISOString()};lastError=null;
+    lastCheck={healthy:true,exitIp:fields.ip,egressCountry:/^[A-Z]{2}$/.test(fields.loc)?fields.loc:null,
+      serverCountry:t.server.country,checkedAt:new Date().toISOString()};lastError=null;
   }catch(e){lastError=e.message;lastCheck={healthy:false,checkedAt:new Date().toISOString()};}
   finally{s?.destroy();}
   return status();
@@ -122,7 +123,7 @@ async function check(){
 function status(){return {installed:true,linked:!!saved.token,experimental:true,tcp:true,udp:false,
   state:!saved.token?'REAUTH_REQUIRED':lastError || (lastCheck?.healthy?'CONNECTED':'READY'),
   country:saved.country,quota:saved.quota || {limit:null,remaining:null,reset:null,unlimited:null},
-  ...lastCheck,country:saved.country,healthy:!!lastCheck?.healthy && !lastError,error:lastError,activeConnections:active.size,refreshAvailable:!!saved.token?.refresh_token};}
+  ...lastCheck,healthy:!!lastCheck?.healthy && !lastError,error:lastError,activeConnections:active.size,refreshAvailable:!!saved.token?.refresh_token};}
 async function control(path,input){
   if(path==='/status')return status();
   if(path==='/locations')return {locations:(await listLocations()).map(({code,name,available})=>({code,name,available})).sort((a,b)=>a.name.localeCompare(b.name,'en'))};

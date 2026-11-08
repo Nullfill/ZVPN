@@ -43,6 +43,9 @@ export function locations(records) {
     for (const city of country.cities) for (const s of city.servers || []) {
       if ((s.quarantined !== undefined && s.quarantined !== false) || !/^[a-z0-9-]+\.m[0-9]+\.fastly-masque\.net$/.test(s.hostname || '')
           || !Number.isInteger(s.port ?? 443) || (s.port ?? 443)<1 || (s.port ?? 443)>65535) continue;
+      // Mozilla also lists the global recommended endpoint under US ("CatchAll
+      // Anycast"). It can exit in another country, so it is not a country server.
+      if (/^p\.m[0-9]+\.fastly-masque\.net$/.test(s.hostname)) continue;
       // Unknown transport declarations are never guessed.
       if (s.protocols && (!Array.isArray(s.protocols) || !s.protocols.every(p => p === 'https'))) continue;
       servers.push({hostname:s.hostname,port:s.port ?? 443});
