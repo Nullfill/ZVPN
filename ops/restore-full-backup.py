@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Restore a Telegram/local/GitHub full snapshot on a replacement Linux server."""
 import argparse,getpass,gzip,hashlib,io,json,os,pathlib,re,secrets,shutil,subprocess,sys,tarfile,tempfile
-import time
+import signal,time
 from contextlib import contextmanager
 from urllib.parse import urlparse,unquote
 from importlib.util import spec_from_file_location,module_from_spec
@@ -147,6 +147,36 @@ COMMIT;
     postgres_sql(sql.encode(), stdout=subprocess.DEVNULL)
     print(f'Database import activated. Previous database, if present, retained as {old}.', flush=True)
 
+
+def stop_legacy_panel(app):
+    """Stop only the root backend started by the old upgrade fallback."""
+    backend = (pathlib.Path(app)/'backend').resolve()
+
+    def matches(process):
+        try:
+            if process.stat().st_uid != 0 or (process/'cwd').readlink() != backend:
+                return False
+            args = (process/'cmdline').read_bytes().rstrip(b'\x00').split(b'\x00')
+            return len(args) == 2 and args[0].rsplit(b'/', 1)[-1] == b'node' and args[1] == b'src/server.js'
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            return False
+
+    pending = []
+    for process in pathlib.Path('/proc').iterdir():
+        if process.name.isdecimal() and matches(process):
+            try:
+                os.kill(int(process.name), signal.SIGTERM)
+                pending.append(process)
+            except ProcessLookupError:
+                pass
+    for _ in range(20):
+        pending = [process for process in pending if matches(process)]
+        if not pending:
+            return
+        time.sleep(0.25)
+    raise ValueError('The manually started ZVPN backend did not stop. Stop it before retrying.')
+
+
 def copy_tree(source,destination):
     source,destination=pathlib.Path(source),pathlib.Path(destination)
     if source.is_symlink():
@@ -207,6 +237,7 @@ def restore(root):
         copy_tree(source,app)
         apply_network_optimizations(app)
         run(['systemctl','stop','zvpn-panel','strongswan-starter'])
+        stop_legacy_panel(app)
         subprocess.run(['systemctl','stop','xray'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         subprocess.run(['systemctl','stop','zvpn-warp-router','warp-svc','zvpn-firefox'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         activate_database(candidate, dbname, username, password)

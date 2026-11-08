@@ -58,19 +58,12 @@ if [[ "$PANEL_UNIT_STATE" == "not-found" ]] && command -v pm2 &>/dev/null && pm2
   SERVICE_MGR="pm2"
 else
   SERVICE_MGR="systemd"
-  if systemctl is-active --quiet zvpn-panel; then
-    systemctl stop zvpn-panel
-  else
-    # Recover a backend left running by older upgrades' manual fallback.
-    for process in /proc/[0-9]*; do
-      [[ "$(readlink -f "$process/cwd" 2>/dev/null)" == "$APP_DIR/backend" ]] || continue
-      args=()
-      { mapfile -d '' -t args < "$process/cmdline"; } 2>/dev/null || continue
-      [[ ${#args[@]} -eq 2 && "${args[0]##*/}" == node && "${args[1]}" == src/server.js ]] || continue
-      kill -TERM "${process##*/}" 2>/dev/null || true
-    done
-    systemctl stop zvpn-panel 2>/dev/null || [[ "$PANEL_UNIT_STATE" == "not-found" ]]
-  fi
+  systemctl stop zvpn-panel 2>/dev/null || [[ "$PANEL_UNIT_STATE" == "not-found" ]]
+  python3 - "$APP_DIR" <<'PY'
+import pathlib,runpy,sys
+app = pathlib.Path(sys.argv[1])
+runpy.run_path(str(app/'ops/restore-full-backup.py'))['stop_legacy_panel'](app)
+PY
 fi
 sleep 1
 ok "Service stopped (manager: $SERVICE_MGR)"
