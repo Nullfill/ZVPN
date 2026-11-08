@@ -33,7 +33,10 @@ python3 "$TOOLS/full-backup.py" > "$WORK/backup.tar.gz"
 REMOTE_DIR="$("${SSH[@]}" 'mktemp -d /tmp/zvpn-migrate-XXXXXXXX')"
 [[ "$REMOTE_DIR" =~ ^/tmp/zvpn-migrate-[A-Za-z0-9]+$ ]] || exit 1
 "${SCP[@]}" "$WORK/backup.tar.gz" "$TOOLS/restore-full-backup.py" "$TOOLS/restore-full-backup.sh" "root@$NEW_IP:$REMOTE_DIR/"
-"${SSH[@]}" "bash '$REMOTE_DIR/restore-full-backup.sh' '$REMOTE_DIR/backup.tar.gz' --yes"
+if ! "${SSH[@]}" "bash '$REMOTE_DIR/restore-full-backup.sh' '$REMOTE_DIR/backup.tar.gz' --yes"; then
+    echo "Restore failed. The source stays online. The backup is retained on the destination at $REMOTE_DIR/backup.tar.gz." >&2
+    exit 1
+fi
 "${SSH[@]}" 'cd /opt/zvpn-panel/app/backend && node scripts/netlify-status.js'
 "${SSH[@]}" 'cd /opt/zvpn-panel/app/backend && node scripts/xray-relay-status.js'
 "${SSH[@]}" 'cd /opt/zvpn-panel/app/backend && node scripts/ike-relay-status.js'
@@ -64,7 +67,10 @@ PY
         sleep 10
     done
     if [[ "$RESOLVED" == 1 ]]; then
-        "${SSH[@]}" 'curl -fsS http://127.0.0.1:3300/api/health >/dev/null && systemctl is-active --quiet strongswan-starter xray zvpn-panel nginx'
+        "${SSH[@]}" 'curl -fsS http://127.0.0.1:3300/api/health >/dev/null &&
+          systemctl is-active --quiet strongswan-starter &&
+          systemctl is-active --quiet zvpn-panel &&
+          systemctl is-active --quiet nginx'
         echo 'DNS updated and destination services are active. Existing certificates retained.'
     else
         echo 'Data restored, but DNS still pending. Do not remove the old server yet.'

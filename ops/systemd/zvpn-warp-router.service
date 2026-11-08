@@ -1,7 +1,7 @@
 [Unit]
 Description=ZVPN selective WARP routing and traffic counters
 After=network-online.target warp-svc.service strongswan-starter.service
-Wants=network-online.target warp-svc.service
+Wants=network-online.target
 
 [Service]
 Type=simple

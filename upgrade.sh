@@ -9,7 +9,7 @@ set -Eeuo pipefail
 
 [[ $EUID -eq 0 ]] || { echo "Run as root: sudo bash upgrade.sh"; exit 1; }
 
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="$(cd "${ZVPN_APP_DIR:-$(dirname "${BASH_SOURCE[0]}")}" && pwd)"
 ENV_FILE="$APP_DIR/backend/.env"
 
 C='\033[1;36m'; G='\033[1;32m'; Y='\033[1;33m'; R='\033[1;31m'; N='\033[0m'
@@ -21,6 +21,8 @@ die(){  echo -e "${R}[ERROR]${N} $*" >&2; exit 1; }
 # ── Sanity checks ───────────────────────────────────────────
 [[ -f "$ENV_FILE" ]] || die "No .env found at $ENV_FILE — is this a ZVPN install?"
 [[ -f "$APP_DIR/backend/package.json" ]] || die "Run this script from the ZVPN app directory"
+systemctl show --property=Version --value >/dev/null 2>&1 ||
+  die "Cannot reach systemd. Run the upgrade from the booted server, where systemd manages PostgreSQL, strongSwan and Xray."
 
 NEW_VERSION="$(cat "$APP_DIR/VERSION" 2>/dev/null || echo unknown)"
 
@@ -50,16 +52,25 @@ NEW_VERSION="$(cat "$APP_DIR/VERSION" 2>/dev/null || echo unknown)"
 
 # ── Step 2: Stop service ────────────────────────────────────
 info "Stopping ZVPN Panel service..."
-if systemctl is-active --quiet zvpn-panel 2>/dev/null; then
-  systemctl stop zvpn-panel
-  SERVICE_MGR="systemd"
-elif command -v pm2 &>/dev/null && pm2 list 2>/dev/null | grep -q zvpn; then
+PANEL_UNIT_STATE="$(systemctl show --property=LoadState --value zvpn-panel 2>/dev/null || true)"
+if [[ "$PANEL_UNIT_STATE" == "not-found" ]] && command -v pm2 &>/dev/null && pm2 list 2>/dev/null | grep -q zvpn; then
   pm2 stop zvpn-backend 2>/dev/null || true
   SERVICE_MGR="pm2"
 else
-  warn "No known service manager detected — will attempt manual node kill"
-  pkill -f "node.*server.js" 2>/dev/null || true
-  SERVICE_MGR="none"
+  SERVICE_MGR="systemd"
+  if systemctl is-active --quiet zvpn-panel; then
+    systemctl stop zvpn-panel
+  else
+    # Recover a backend left running by older upgrades' manual fallback.
+    for process in /proc/[0-9]*; do
+      [[ "$(readlink -f "$process/cwd" 2>/dev/null)" == "$APP_DIR/backend" ]] || continue
+      args=()
+      { mapfile -d '' -t args < "$process/cmdline"; } 2>/dev/null || continue
+      [[ ${#args[@]} -eq 2 && "${args[0]##*/}" == node && "${args[1]}" == src/server.js ]] || continue
+      kill -TERM "${process##*/}" 2>/dev/null || true
+    done
+    systemctl stop zvpn-panel 2>/dev/null || [[ "$PANEL_UNIT_STATE" == "not-found" ]]
+  fi
 fi
 sleep 1
 ok "Service stopped (manager: $SERVICE_MGR)"
@@ -134,7 +145,7 @@ if [[ "$SERVICE_MGR" == "systemd" ]]; then
     install -o root -g root -m 0644 "$APP_DIR/ops/systemd/zvpn-panel.service" /etc/systemd/system/zvpn-panel.service
     systemctl daemon-reload
   fi
-  systemctl restart zvpn-panel
+  systemctl enable --now zvpn-panel
   sleep 2
   systemctl is-active --quiet zvpn-panel || { journalctl -u zvpn-panel -n 80 --no-pager; die "Panel failed to start"; }
 
@@ -143,12 +154,6 @@ elif [[ "$SERVICE_MGR" == "pm2" ]]; then
   pm2 restart zvpn-backend 2>/dev/null || pm2 start src/server.js --name zvpn-backend
   sleep 2
 
-else
-  # Fallback: start manually in background
-  warn "Starting backend manually (no service manager found)..."
-  cd "$APP_DIR/backend"
-  nohup node src/server.js >> /var/log/zvpn-panel.log 2>&1 &
-  sleep 3
 fi
 
 # ── Step 8: Health check ─────────────────────────────────────
@@ -160,9 +165,7 @@ for i in 1 2 3 4 5; do
     break
   fi
   if [[ $i -eq 5 ]]; then
-    warn "Health check did not respond — check logs:"
-    echo "  journalctl -u zvpn-panel -n 50 --no-pager"
-    echo "  cat /var/log/zvpn-panel.log"
+    die "Panel health check failed. Inspect: journalctl -u zvpn-panel -n 50 --no-pager"
   fi
   sleep 2
 done
@@ -173,17 +176,22 @@ if command -v nginx >/dev/null && nginx -t >/dev/null 2>&1; then
 fi
 
 # Startup sync provisions every eligible existing account after migration 008.
-info "Waiting for existing users to synchronize with Xray..."
-XRAY_READY=0
-for attempt in {1..30}; do
-  if systemctl is-active --quiet xray && [[ -s /usr/local/etc/xray/config.json ]]; then
-    XRAY_READY=1
-    break
-  fi
-  sleep 2
-done
-[[ "$XRAY_READY" == 1 ]] || die "Xray provisioning failed; inspect zvpn-panel and xray service logs"
-ok "Existing user accounts synchronized with Xray; expiry and shared balance preserved"
+XRAY_ENABLED="$(psql "$DB_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT COALESCE((SELECT value->>'enabled' FROM panel_settings WHERE key='xray'), 'true')")"
+if [[ "$XRAY_ENABLED" == "false" ]]; then
+  info "Xray is disabled in panel settings"
+else
+  info "Waiting for existing users to synchronize with Xray..."
+  XRAY_READY=0
+  for attempt in {1..30}; do
+    if systemctl is-active --quiet xray && [[ -s /usr/local/etc/xray/config.json ]]; then
+      XRAY_READY=1
+      break
+    fi
+    sleep 2
+  done
+  [[ "$XRAY_READY" == 1 ]] || die "Xray provisioning failed. Inspect: journalctl -u zvpn-panel -u xray -n 80 --no-pager"
+  ok "Existing user accounts synchronized with Xray; expiry and shared balance preserved"
+fi
 (cd "$APP_DIR/backend" && node scripts/netlify-status.js) || info "Check Netlify settings in the admin panel"
 (cd "$APP_DIR/backend" && node scripts/xray-relay-status.js) || info "Check Iran Xray settings in the admin panel"
 info "Iran IKE relay settings, profiles and certificates are reconciled on panel startup; existing configuration is preserved."

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Restore a Telegram/local/GitHub full snapshot on a replacement Linux server."""
-import argparse,getpass,gzip,hashlib,io,json,os,pathlib,shutil,subprocess,sys,tarfile,tempfile
+import argparse,getpass,gzip,hashlib,io,json,os,pathlib,re,secrets,shutil,subprocess,sys,tarfile,tempfile
+import time
+from contextlib import contextmanager
 from urllib.parse import urlparse,unquote
 from importlib.util import spec_from_file_location,module_from_spec
 
@@ -61,6 +63,90 @@ def decrypt_backup(data,password):
 def run(args,**kw):
     return subprocess.run(args,check=True,**kw)
 
+POSTGRES = ['runuser', '-u', 'postgres', '--']
+PSQL = POSTGRES + ['psql', '-X', '-p', '5432', '-v', 'ON_ERROR_STOP=1']
+
+
+def identifier(value):
+    return '"' + value.replace('"', '""') + '"'
+
+
+def literal(value):
+    return "'" + value.replace("'", "''") + "'"
+
+
+def compatible_dump(dump, server_version):
+    if server_version >= 170000:
+        return dump
+    # Only remove pg_dump's session setting from its header. A COPY row or
+    # function body containing the same text must remain byte-for-byte intact.
+    preamble = re.match(
+        rb'\A--\r?\n-- PostgreSQL database dump\r?\n'
+        rb'(?:(?:--[^\n]*|\\restrict [A-Za-z0-9]+|\r?)\r?\n)*'
+        rb'SET statement_timeout = 0;\r?\n'
+        rb'SET lock_timeout = 0;\r?\n'
+        rb'SET idle_in_transaction_session_timeout = 0;\r?\n'
+        rb'(SET transaction_timeout = 0;\r?\n)', dump)
+    if not preamble:
+        return dump
+    start, end = preamble.span(1)
+    return dump[:start] + dump[end:]
+
+
+def postgres_sql(sql, database='postgres', **kwargs):
+    return run(PSQL + ['-d', database], input=sql, **kwargs)
+
+
+@contextmanager
+def stage_database(root, username, dbname):
+    # Refuse identifiers PostgreSQL would truncate, including into a system name.
+    if not dbname or len(dbname.encode()) > 63 or dbname in ('postgres', 'template0', 'template1'):
+        raise ValueError('Invalid or reserved PostgreSQL database name')
+    dump = gzip.decompress((root/'database.sql.gz').read_bytes())
+    version = int(run(PSQL + ['-d', 'postgres', '-Atc', 'SHOW server_version_num'],
+                      stdout=subprocess.PIPE).stdout.strip())
+    sql = f"SET standard_conforming_strings = on; SELECT EXISTS (SELECT FROM pg_roles WHERE rolname={literal(username)});"
+    exists = run(PSQL + ['-d', 'postgres', '-qAtc', sql], stdout=subprocess.PIPE).stdout.strip()
+    if exists == b'f':
+        postgres_sql(f'CREATE ROLE {identifier(username)} LOGIN;'.encode(), stdout=subprocess.DEVNULL)
+    candidate = 'zvpn_import_' + secrets.token_hex(8)
+    run(POSTGRES + ['createdb', '-p', '5432', '--template=template0', '--owner', username, '--', candidate])
+    try:
+        try:
+            postgres_sql(
+                f'BEGIN;\nSET ROLE {identifier(username)};\n'.encode()
+                + compatible_dump(dump, version) + b'\nCOMMIT;\n',
+                candidate, stdout=subprocess.DEVNULL)
+        except subprocess.CalledProcessError:
+            raise ValueError(
+                f'Backup SQL is incompatible with destination PostgreSQL {version // 10000}, '
+                'or the import failed. The existing database was not replaced. '
+                'Review the PostgreSQL error above; a newer PostgreSQL may be required.'
+            ) from None
+        yield candidate
+    finally:
+        # After a successful swap the temporary name no longer exists.
+        subprocess.run(POSTGRES + ['dropdb', '-p', '5432', '--if-exists', '--', candidate],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def activate_database(candidate, dbname, username, password):
+    old = 'zvpn_previous_' + secrets.token_hex(8)
+    sql = rf"""
+BEGIN;
+SET LOCAL standard_conforming_strings = on;
+SELECT EXISTS (SELECT FROM pg_database WHERE datname={literal(dbname)}) AS has_previous \gset
+\if :has_previous
+ALTER DATABASE {identifier(dbname)} RENAME TO {identifier(old)};
+ALTER DATABASE {identifier(old)} ALLOW_CONNECTIONS false;
+\endif
+ALTER DATABASE {identifier(candidate)} RENAME TO {identifier(dbname)};
+ALTER ROLE {identifier(username)} WITH PASSWORD {literal(password)};
+COMMIT;
+"""
+    postgres_sql(sql.encode(), stdout=subprocess.DEVNULL)
+    print(f'Database import activated. Previous database, if present, retained as {old}.', flush=True)
+
 def copy_tree(source,destination):
     source,destination=pathlib.Path(source),pathlib.Path(destination)
     if source.is_symlink():
@@ -92,18 +178,20 @@ def apply_network_optimizations(app):
 def restore(root):
     root=pathlib.Path(root)
     app=pathlib.Path('/opt/zvpn-panel/app')
-    # The snapshot carries the exact release source, not whatever main contains later.
-    copy_tree(root/'app-source',app)
-    if not (app/'install.sh').is_file(): raise ValueError('Backup lacks installation source')
+    source=root/'app-source'
+    if not (source/'install.sh').is_file(): raise ValueError('Backup lacks installation source')
+    run(['systemctl','show','--property=Version','--value'],stdout=subprocess.DEVNULL)
     # Import the env parser without running the backup executable.
-    spec=spec_from_file_location('snapshot',app/'ops/full-backup.py'); module=module_from_spec(spec);spec.loader.exec_module(module)
+    spec=spec_from_file_location('snapshot',source/'ops/full-backup.py'); module=module_from_spec(spec);spec.loader.exec_module(module)
     text=(root/'panel.env').read_text()
     database=urlparse(module.env_value(text,'DATABASE_URL'))
     if database.hostname not in ('127.0.0.1','localhost') or database.port not in (None,5432):
         raise ValueError('Automatic restore requires a local PostgreSQL database')
-    username,password,dbname=unquote(database.username),unquote(database.password),unquote(database.path[1:])
-    if not dbname or dbname in ('postgres','template0','template1'):
-        raise ValueError('Refusing to replace a PostgreSQL system database')
+    username,password,dbname=unquote(database.username or ''),unquote(database.password or ''),unquote(database.path[1:])
+    if not username or len(username.encode()) > 63 or username == 'postgres':
+        raise ValueError('Automatic restore requires a dedicated panel PostgreSQL role')
+    if not dbname or len(dbname.encode()) > 63 or dbname in ('postgres','template0','template1'):
+        raise ValueError('Invalid or reserved PostgreSQL database name')
     domain=urlparse(module.env_value(text,'PUBLIC_BASE_URL')).hostname
     installed = (pathlib.Path('/usr/local/sbin/zvpn-helper').is_file()
                  and pathlib.Path('/etc/systemd/system/zvpn-panel.service').is_file()
@@ -112,25 +200,18 @@ def restore(root):
     if not shutil.which('node') or not shutil.which('nginx') or not shutil.which('psql') or not installed:
         env=os.environ.copy();env.update(ZVPN_NON_INTERACTIVE='1',ZVPN_DOMAIN=domain,
             ZVPN_DB_NAME=dbname,ZVPN_DB_USER=username)
-        run(['bash',str(app/'install.sh')],env=env)
-    # Apply on both fresh and already-installed destinations, before restoring
-    # the source IKE configuration (optimizers may edit proposals and restart).
-    apply_network_optimizations(app)
-    run(['systemctl','stop','zvpn-panel','strongswan-starter'])
-    subprocess.run(['systemctl','stop','xray'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    subprocess.run(['systemctl','stop','zvpn-warp-router','warp-svc','zvpn-firefox'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        run(['bash',str(source/'install.sh')],env=env)
+    with stage_database(root, username, dbname) as candidate:
+        # The import has succeeded before overwriting files or stopping services
+        # on an installed destination.
+        copy_tree(source,app)
+        apply_network_optimizations(app)
+        run(['systemctl','stop','zvpn-panel','strongswan-starter'])
+        subprocess.run(['systemctl','stop','xray'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        subprocess.run(['systemctl','stop','zvpn-warp-router','warp-svc','zvpn-firefox'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        activate_database(candidate, dbname, username, password)
     shutil.copy2(root/'panel.env',app/'backend/.env')
     run(['chown','zvpn:zvpn',str(app/'backend/.env')]);os.chmod(app/'backend/.env',0o600)
-    ident=lambda value:'"'+value.replace('"','""')+'"'
-    literal=lambda value:"'"+value.replace("'","''")+"'"
-    sql=f"DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname={literal(username)}) THEN CREATE ROLE {ident(username)} LOGIN; END IF; END $$; ALTER ROLE {ident(username)} WITH PASSWORD {literal(password)};"
-    run(['runuser','-u','postgres','--','psql','-v','ON_ERROR_STOP=1'],input=sql.encode(),stdout=subprocess.DEVNULL)
-    # The operator has explicitly confirmed replacement of this panel database.
-    # A clean DB avoids stale accounts and extensions owned by the old installer.
-    run(['runuser','-u','postgres','--','dropdb','--if-exists','--force','--',dbname])
-    run(['runuser','-u','postgres','--','createdb','--owner',username,'--',dbname])
-    run(['runuser','-u','postgres','--','psql','-d',dbname,'-v','ON_ERROR_STOP=1'],
-        input=(f'SET ROLE {ident(username)};\n'.encode()+gzip.decompress((root/'database.sql.gz').read_bytes())),stdout=subprocess.DEVNULL)
     for name,destination in [('ipsec.d','/etc/ipsec.d'),('letsencrypt','/etc/letsencrypt'),
                              ('nginx','/etc/nginx'),('xray','/usr/local/etc/xray'),
                              ('runtime','/opt/zvpn-panel/runtime'),('systemd','/etc/systemd/system')]:
@@ -182,6 +263,25 @@ def restore(root):
     run(['systemctl','restart','strongswan-starter','zvpn-panel','nginx'])
     run(['systemctl','enable','strongswan-starter','zvpn-panel','xray','nginx'])
     run(['bash',str(app/'doctor.sh')])
+    enabled = run(PSQL + ['-d', dbname, '-Atc',
+        "SELECT COALESCE((SELECT value->>'enabled' FROM panel_settings WHERE key='xray'), 'true')"],
+        stdout=subprocess.PIPE).stdout.strip() != b'false'
+    health_checks = [
+        ['systemctl', 'is-active', '--quiet', service]
+        for service in ('strongswan-starter', 'zvpn-panel', 'nginx', *(['xray'] if enabled else []))
+    ]
+    health_checks.append(['curl', '-fsS', '--max-time', '4', 'http://127.0.0.1:3300/api/health'])
+    if enabled:
+        health_checks.append(['/usr/local/bin/xray', 'api', 'statsquery',
+                              '--server=127.0.0.1:10086', '-pattern', 'user>>>'])
+    for attempt in range(10):
+        if all(subprocess.run(check, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+               for check in health_checks):
+            break
+        time.sleep(2)
+    else:
+        raise ValueError('Database restored, but destination services did not become healthy. '
+                         'Check zvpn-panel, xray and strongswan-starter logs before changing DNS.')
     print('Restore complete. Existing certificates and account identities preserved. Update DNS to this server.')
 
 def main():

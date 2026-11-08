@@ -6,6 +6,18 @@ spec=importlib.util.spec_from_file_location('restore',ROOT/'ops/restore-full-bac
 restore=importlib.util.module_from_spec(spec);spec.loader.exec_module(restore)
 
 class FullBackupTests(unittest.TestCase):
+    def test_new_dump_header_is_normalized_without_touching_data(self):
+        setting = b'SET transaction_timeout = 0;\n'
+        header = (b'--\n-- PostgreSQL database dump\n--\n\n\\restrict Example123\n\n'
+                  b'-- Dumped from database version 18.1\n-- Dumped by pg_dump version 18.1\n\n'
+                  b'SET statement_timeout = 0;\nSET lock_timeout = 0;\n'
+                  b'SET idle_in_transaction_session_timeout = 0;\n')
+        body = b'SET client_encoding = \'UTF8\';\nCOPY public.fixture (value) FROM stdin;\n' + setting + b'\\.\n'
+        dump = header + setting + body
+        self.assertEqual(restore.compatible_dump(dump, 160011), header + body)
+        self.assertEqual(restore.compatible_dump(dump, 170000), dump)
+        self.assertEqual(restore.compatible_dump(header + body, 160011), header + body)
+
     def test_enabled_firefox_requires_account_ciphertext_and_matching_key_in_snapshot(self):
         data, _ = self.snapshot()
         with tempfile.TemporaryDirectory() as directory:
