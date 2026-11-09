@@ -223,6 +223,8 @@ def restore(root):
     source=root/'app-source'
     if not (source/'install.sh').is_file(): raise ValueError('Backup lacks installation source')
     prepare_application_source(source)
+    snapshot_version = root/'xray/version.json'
+    xray_version = json.loads(snapshot_version.read_text())['version'] if snapshot_version.is_file() else None
     run(['systemctl','show','--property=Version','--value'],stdout=subprocess.DEVNULL)
     # Import the env parser without running the backup executable.
     spec=spec_from_file_location('snapshot',source/'ops/full-backup.py'); module=module_from_spec(spec);spec.loader.exec_module(module)
@@ -256,6 +258,9 @@ def restore(root):
         activate_database(candidate, dbname, username, password)
     shutil.copy2(root/'panel.env',app/'backend/.env')
     run(['chown','zvpn:zvpn',str(app/'backend/.env')]);os.chmod(app/'backend/.env',0o600)
+    # Older installers compare version.json against the requested release.
+    # Keep the destination marker until the installer has checked its binary.
+    snapshot_version.unlink(missing_ok=True)
     for name,destination in [('ipsec.d','/etc/ipsec.d'),('letsencrypt','/etc/letsencrypt'),
                              ('nginx','/etc/nginx'),('xray','/usr/local/etc/xray'),
                              ('runtime','/opt/zvpn-panel/runtime'),('systemd','/etc/systemd/system')]:
@@ -297,7 +302,7 @@ def restore(root):
     run(['chmod','-R','go-rwx','/opt/zvpn-panel/runtime'])
     # Install root-owned helpers and the recorded version of Xray before panel sync.
     run(['install','-o','root','-g','root','-m','755',str(app/'ops/helper/zvpn-helper'),'/usr/local/sbin/zvpn-helper'])
-    run(['bash',str(app/'ops/install-xray.sh')])
+    run(['bash',str(app/'ops/install-xray.sh'),*([xray_version] if xray_version else [])])
     run(['bash',str(app/'ops/install-helper-permissions.sh')])
     run(['npm','ci','--omit=dev','--ignore-scripts'],cwd=app/'backend',umask=0o022)
     run(['nginx','-t']);run(['systemctl','daemon-reload'])
