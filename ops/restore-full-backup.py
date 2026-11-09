@@ -205,11 +205,24 @@ def apply_network_optimizations(app):
         else:
             print('Warning: snapshot lacks optional network optimizer '+name,flush=True)
 
+
+def prepare_application_source(source):
+    # Older backups created these wrapper directories under a root-only umask.
+    # rsync/copy_tree preserve their modes, but the installed app needs to be
+    # accessible to PostgreSQL, nginx and the unprivileged panel user.
+    for directory in (source, source/'backend', source/'frontend'):
+        if directory.is_dir():
+            if directory.is_symlink():
+                raise ValueError('Invalid application source directory: '+directory.name)
+            directory.chmod(0o755)
+
+
 def restore(root):
     root=pathlib.Path(root)
     app=pathlib.Path('/opt/zvpn-panel/app')
     source=root/'app-source'
     if not (source/'install.sh').is_file(): raise ValueError('Backup lacks installation source')
+    prepare_application_source(source)
     run(['systemctl','show','--property=Version','--value'],stdout=subprocess.DEVNULL)
     # Import the env parser without running the backup executable.
     spec=spec_from_file_location('snapshot',source/'ops/full-backup.py'); module=module_from_spec(spec);spec.loader.exec_module(module)
@@ -230,7 +243,7 @@ def restore(root):
     if not shutil.which('node') or not shutil.which('nginx') or not shutil.which('psql') or not installed:
         env=os.environ.copy();env.update(ZVPN_NON_INTERACTIVE='1',ZVPN_DOMAIN=domain,
             ZVPN_DB_NAME=dbname,ZVPN_DB_USER=username)
-        run(['bash',str(source/'install.sh')],env=env)
+        run(['bash',str(source/'install.sh')],env=env,umask=0o022)
     with stage_database(root, username, dbname) as candidate:
         # The import has succeeded before overwriting files or stopping services
         # on an installed destination.
@@ -286,13 +299,15 @@ def restore(root):
     run(['install','-o','root','-g','root','-m','755',str(app/'ops/helper/zvpn-helper'),'/usr/local/sbin/zvpn-helper'])
     run(['bash',str(app/'ops/install-xray.sh')])
     run(['bash',str(app/'ops/install-helper-permissions.sh')])
-    run(['npm','ci','--omit=dev','--ignore-scripts'],cwd=app/'backend')
+    run(['npm','ci','--omit=dev','--ignore-scripts'],cwd=app/'backend',umask=0o022)
     run(['nginx','-t']);run(['systemctl','daemon-reload'])
     # Only restore the extra direct port on servers that had explicitly enabled it.
     if (root/'systemd/zvpn-ike-direct-port.service').is_file():
         run(['systemctl','enable','--now','zvpn-ike-direct-port.service'])
     run(['systemctl','restart','strongswan-starter','zvpn-panel','nginx'])
     run(['systemctl','enable','strongswan-starter','zvpn-panel','xray','nginx'])
+    if (root/'warp-policy/warp.json').is_file():
+        run(['systemctl','start','zvpn-warp-router'])
     run(['bash',str(app/'doctor.sh')])
     enabled = run(PSQL + ['-d', dbname, '-Atc',
         "SELECT COALESCE((SELECT value->>'enabled' FROM panel_settings WHERE key='xray'), 'true')"],

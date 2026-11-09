@@ -25,8 +25,12 @@ case "$(uname -m)" in
   aarch64|arm64) ASSET=Xray-linux-arm64-v8a.zip ;;
   *) echo 'Unsupported Xray architecture' >&2; exit 1 ;;
 esac
-CURRENT="$(python3 -c 'import json; print(json.load(open("/usr/local/etc/xray/version.json"))["version"])' 2>/dev/null || true)"
-if [[ ! -x /usr/local/bin/xray || "$CURRENT" != "$VERSION" ]]; then
+# Restore copies version.json from the backup before installing the binary.
+CURRENT=""
+if [[ -x /usr/local/bin/xray ]]; then
+  CURRENT="$(/usr/local/bin/xray version 2>/dev/null | awk 'NR == 1 && $1 == "Xray" {print "v" $2}' || true)"
+fi
+if [[ "$CURRENT" != "$VERSION" ]]; then
   BASE="https://github.com/XTLS/Xray-core/releases/download/$VERSION"
   curl --fail --silent --show-error --location --retry 3 "$BASE/$ASSET" -o "$WORK/$ASSET"
   curl --fail --silent --show-error --location --retry 3 "$BASE/$ASSET.dgst" -o "$WORK/digest"

@@ -6,6 +6,24 @@ spec=importlib.util.spec_from_file_location('restore',ROOT/'ops/restore-full-bac
 restore=importlib.util.module_from_spec(spec);spec.loader.exec_module(restore)
 
 class FullBackupTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'posix', 'requires POSIX directory permissions')
+    def test_private_snapshot_wrappers_do_not_make_the_installed_app_inaccessible(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = pathlib.Path(folder)
+            source = root/'app-source'
+            source.mkdir(mode=0o700)
+            for name in ('backend', 'frontend'):
+                (source/name).mkdir(mode=0o700)
+            secret = root/'panel.env'
+            secret.touch(mode=0o600)
+            restore.prepare_application_source(source)
+            installed = root/'installed'
+            restore.copy_tree(source, installed)
+            for directory in (installed, installed/'backend', installed/'frontend'):
+                self.assertEqual(directory.stat().st_mode & 0o777, 0o755)
+            self.assertEqual(root.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(secret.stat().st_mode & 0o777, 0o600)
+
     def test_new_dump_header_is_normalized_without_touching_data(self):
         setting = b'SET transaction_timeout = 0;\n'
         header = (b'--\n-- PostgreSQL database dump\n--\n\n\\restrict Example123\n\n'
